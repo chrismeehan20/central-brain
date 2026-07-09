@@ -1,0 +1,41 @@
+{
+  "name": "central-brain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local mission-control dashboard for tracking many AI-agent-driven projects at once.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"tsx watch src/server/index.ts\" \"vite\"",
+    "build": "vite build && tsc -p tsconfig.json",
+    "start": "node dist/server/index.js",
+    "install-hooks": "tsx bin/install-hooks.ts",
+    "uninstall-hooks": "tsx bin/uninstall-hooks.ts",
+    "install-service": "tsx bin/install-service.ts",
+    "uninstall-service": "tsx bin/uninstall-service.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.bin.json"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@fastify/static": "^8.0.4",
+    "chokidar": "^4.0.3",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.1",
+    "gray-matter": "^4.0.3",
+    "lowdb": "^7.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
+  }
+}
