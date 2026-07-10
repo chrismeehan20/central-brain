@@ -15,12 +15,17 @@ interface Tracked {
 // Codex has no hook system, so this is a heuristic staleness check, not a
 // true push signal — a rollout file that stops growing might mean Codex is
 // waiting on the user, or might just mean the session ended normally.
+//
+// Keyed by transcript path, not session id: a resumed session can produce
+// several rollout files that share one id, and tracking growth per file
+// keeps them from clobbering each other's size baseline.
 const tracked = new Map<string, Tracked>();
 
-function upsertAttention(sessionId: string, projectPath: string) {
+/** Returns true if a new item was created. */
+function upsertAttention(sessionId: string, projectPath: string): boolean {
   const id = `${sessionId}:codex-maybe`;
   const items = attentionDb.data.items;
-  if (items.some((i) => i.id === id)) return;
+  if (items.some((i) => i.id === id)) return false;
   const now = new Date().toISOString();
   items.push({
     id,
@@ -33,12 +38,16 @@ function upsertAttention(sessionId: string, projectPath: string) {
     createdAt: now,
     updatedAt: now,
   });
+  return true;
 }
 
-function clearAttention(sessionId: string) {
+/** Returns true if any item was removed. */
+function clearAttention(sessionId: string): boolean {
+  const before = attentionDb.data.items.length;
   attentionDb.data.items = attentionDb.data.items.filter(
     (i) => !(i.sessionId === sessionId && i.type === "codex-maybe-waiting")
   );
+  return attentionDb.data.items.length !== before;
 }
 
 async function pollOnce(): Promise<void> {
@@ -50,30 +59,35 @@ async function pollOnce(): Promise<void> {
     for (const ref of refs) {
       if (!ref.transcriptPath) continue;
 
-      let size: number;
+      let stat: fs.Stats;
       try {
-        size = fs.statSync(ref.transcriptPath).size;
+        stat = fs.statSync(ref.transcriptPath);
       } catch {
         continue;
       }
 
-      const prev = tracked.get(ref.sessionId);
-      if (!prev || prev.size !== size) {
-        tracked.set(ref.sessionId, { size, lastGrowthAt: now });
+      const key = ref.transcriptPath;
+      const prev = tracked.get(key);
+
+      if (!prev || prev.size !== stat.size) {
+        // On first sight, anchor to the file's real mtime — not `now` — so a
+        // session that finished hours or days ago isn't mistaken for one that
+        // just went quiet at server start. Genuine growth since the last poll
+        // means the session is active, so refresh to now and clear any flag.
+        const lastGrowthAt = prev ? now : stat.mtimeMs;
+        tracked.set(key, { size: stat.size, lastGrowthAt });
         if (prev) {
-          clearAttention(ref.sessionId);
-          changed = true;
+          if (clearAttention(ref.sessionId)) changed = true;
+          continue;
         }
-        continue;
+        // fall through: evaluate staleness against the real mtime baseline
       }
 
-      const quietFor = now - prev.lastGrowthAt;
+      const quietFor = now - tracked.get(key)!.lastGrowthAt;
       if (quietFor > STALE_AFTER_MS && quietFor < ABANDONED_AFTER_MS) {
-        upsertAttention(ref.sessionId, projectPath);
-        changed = true;
+        if (upsertAttention(ref.sessionId, projectPath)) changed = true;
       } else if (quietFor >= ABANDONED_AFTER_MS) {
-        clearAttention(ref.sessionId);
-        changed = true;
+        if (clearAttention(ref.sessionId)) changed = true;
       }
     }
   }
