@@ -15,6 +15,9 @@
     "uninstall-hooks": "tsx bin/uninstall-hooks.ts",
     "install-service": "tsx bin/install-service.ts",
     "uninstall-service": "tsx bin/uninstall-service.ts",
+    "tauri": "tauri",
+    "menubar": "tauri dev",
+    "menubar:build": "npm run build && tauri build",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.bin.json"
   },
   "dependencies": {
@@ -29,6 +32,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^22.10.5",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
