@@ -2,14 +2,33 @@ import { useEffect, useState } from "react";
 import type { Project } from "@shared/types";
 import { fetchProjects, triggerScan, updateOverride } from "./api";
 import ProjectGrid from "./ProjectGrid";
+import ProjectDetailPage from "./ProjectDetailPage";
 import AttentionPanel from "./AttentionPanel";
 import { relativeTime } from "./format";
+
+const DETAIL_PREFIX = "#/project/";
+
+function parseRoute(): string | null {
+  const hash = window.location.hash;
+  return hash.startsWith(DETAIL_PREFIX) ? decodeURIComponent(hash.slice(DETAIL_PREFIX.length)) : null;
+}
+
+export function goToProject(path: string): void {
+  window.location.hash = DETAIL_PREFIX + encodeURIComponent(path);
+}
 
 export default function App() {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [lastScanAt, setLastScanAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [route, setRoute] = useState<string | null>(parseRoute());
+
+  useEffect(() => {
+    const onHashChange = () => setRoute(parseRoute());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   function load() {
     fetchProjects()
@@ -64,6 +83,18 @@ export default function App() {
         <h1>Central Brain</h1>
         <p className="subtitle">Loading projects…</p>
       </main>
+    );
+  }
+
+  if (route) {
+    return (
+      <ProjectDetailPage
+        path={route}
+        project={projects.find((p) => p.path === route)}
+        onBack={() => {
+          window.location.hash = "";
+        }}
+      />
     );
   }
 

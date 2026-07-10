@@ -5,12 +5,14 @@ import Fastify from "fastify";
 import fastifyStatic from "@fastify/static";
 import { runScan } from "./scan/index.js";
 import { projectsRoutes } from "./routes/projects.js";
+import { detailsRoutes } from "./routes/details.js";
 import { hookRoutes } from "./routes/hook.js";
 import { streamRoutes } from "./routes/stream.js";
 import { startWatcher } from "./watch/watcher.js";
 import { startCodexStalenessPoll } from "./poll/codexStaleness.js";
 import { startGithubPoller } from "./poll/githubPoller.js";
 import { startSummaryPoller } from "./poll/summaryPoller.js";
+import { startDetailPoller } from "./poll/detailPoller.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProd = process.env.NODE_ENV === "production";
@@ -21,6 +23,7 @@ const app = Fastify({ logger: true });
 
 app.get("/api/health", async () => ({ ok: true, time: new Date().toISOString() }));
 await app.register(projectsRoutes);
+await app.register(detailsRoutes);
 await app.register(hookRoutes);
 await app.register(streamRoutes);
 
@@ -49,6 +52,7 @@ app
     startCodexStalenessPoll();
     startGithubPoller();
     startSummaryPoller();
+    startDetailPoller();
   })
   .catch((err) => {
     app.log.error(err);

@@ -1,4 +1,4 @@
-import type { Project, Override, ProjectSummary } from "@shared/types";
+import type { Project, Override, ProjectSummary, ProjectDetail, DetailItemKind } from "@shared/types";
 
 export async function fetchProjects(): Promise<{ projects: Project[]; lastScanAt: string | null }> {
   const res = await fetch("/api/projects");
@@ -36,4 +36,51 @@ export async function summarizeProject(path: string): Promise<{ summary: Project
     throw new Error(body.error ?? `Failed to summarize: ${res.status}`);
   }
   return res.json();
+}
+
+async function detailRequest(
+  url: string,
+  method: string,
+  body: Record<string, unknown>
+): Promise<ProjectDetail> {
+  const res = await fetch(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? `Request failed: ${res.status}`);
+  }
+  return (await res.json()).detail;
+}
+
+export async function fetchProjectDetail(path: string): Promise<ProjectDetail> {
+  const res = await fetch(`/api/projects/detail?path=${encodeURIComponent(path)}`);
+  if (!res.ok) throw new Error(`Failed to load detail: ${res.status}`);
+  return (await res.json()).detail;
+}
+
+export function refreshProjectDetail(path: string): Promise<ProjectDetail> {
+  return detailRequest("/api/projects/detail/refresh", "POST", { path });
+}
+
+export function addDetailItem(
+  path: string,
+  kind: DetailItemKind,
+  text: string
+): Promise<ProjectDetail> {
+  return detailRequest("/api/projects/detail/item", "POST", { path, kind, text });
+}
+
+export function updateDetailItem(
+  path: string,
+  id: string,
+  patch: { status?: "open" | "done" | "dismissed"; text?: string; note?: string }
+): Promise<ProjectDetail> {
+  return detailRequest("/api/projects/detail/item", "PATCH", { path, id, ...patch });
+}
+
+export function saveDetailNotes(path: string, notes: string): Promise<ProjectDetail> {
+  return detailRequest("/api/projects/detail/notes", "PUT", { path, notes });
 }

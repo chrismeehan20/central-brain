@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Project } from "@shared/types";
 import { relativeTime } from "./format";
 import { summarizeProject } from "./api";
+import { goToProject } from "./App";
 
 interface Props {
   project: Project;
@@ -137,6 +138,9 @@ export default function ProjectCard({
             Keep
           </button>
         )}
+        <button className="card__details" onClick={() => goToProject(project.path)}>
+          Details →
+        </button>
         <button onClick={() => onTogglePinned(project.path, !project.pinned)}>
           {project.pinned ? "Unpin" : "Pin"}
         </button>

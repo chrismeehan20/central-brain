@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Project, ProjectSummary } from "@shared/types.js";
 import { summariesDb } from "../store/db.js";
+import { canSpend, isDebounced, recordCall } from "./budget.js";
 
 const MODEL = "claude-haiku-4-5-20251001";
 
@@ -41,6 +42,11 @@ export async function getOrGenerateSummary(project: Project, force = false): Pro
     return cached;
   }
 
+  // Debounce rapid manual refreshes, and never exceed the daily call cap —
+  // both fall back to the cached summary without spending a token.
+  if (force && isDebounced(cached?.generatedAt)) return cached;
+  if (!canSpend()) return cached;
+
   const anthropic = getClient();
   if (!anthropic) return cached;
 
@@ -66,6 +72,7 @@ export async function getOrGenerateSummary(project: Project, force = false): Pro
       .join(" ")
       .trim();
 
+    await recordCall();
     if (!text) return cached;
 
     const summary: ProjectSummary = { text, generatedAt: new Date().toISOString(), model: MODEL, hash };

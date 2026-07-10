@@ -52,6 +52,33 @@ export interface Override {
   pinned?: boolean;
 }
 
+export type DetailItemKind = "todo" | "decision" | "pending";
+export type DetailItemStatus = "open" | "done" | "dismissed";
+export type DetailItemOrigin = "ai" | "user";
+
+export interface DetailItem {
+  id: string; // stable, content-derived so refreshes reconcile instead of duplicating
+  kind: DetailItemKind;
+  text: string;
+  status: DetailItemStatus;
+  origin: DetailItemOrigin;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  completedBy?: "ai" | "user"; // who moved it out of "open"
+  note?: string;
+}
+
+export interface ProjectDetail {
+  path: string;
+  items: DetailItem[];
+  notes: string; // freeform scratchpad, user-owned
+  hash?: string; // hash of the last AI evidence input (hourly gate)
+  generatedAt?: string; // last successful AI generation
+  model?: string;
+  lastError?: string; // e.g. "daily AI cap reached" — surfaced in the UI
+}
+
 export interface Project {
   path: string; // canonical absolute path, lowercased
   displayName: string;
