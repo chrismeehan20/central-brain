@@ -35,6 +35,33 @@ function itemId(kind: DetailItemKind, text: string): string {
   return crypto.createHash("sha1").update(`${kind}|${normalize(text)}`).digest("hex").slice(0, 12);
 }
 
+function tokenSet(text: string): Set<string> {
+  return new Set(normalize(text).split(" ").filter((w) => w.length >= 3));
+}
+
+/**
+ * True if `text` is an exact or near-duplicate of any existing item (any
+ * status). Catches the common failure where the model restates an open item in
+ * slightly different words each run — exact-normalized match, high containment
+ * (one is nearly a subset of the other), or high Jaccard overlap.
+ */
+function isNearDuplicate(text: string, existing: DetailItem[]): boolean {
+  const na = normalize(text);
+  const a = tokenSet(text);
+  for (const item of existing) {
+    if (normalize(item.text) === na) return true; // exact restatement
+    if (a.size < 3) continue; // too short to judge fuzzily
+    const b = tokenSet(item.text);
+    if (b.size === 0) continue;
+    let inter = 0;
+    for (const w of a) if (b.has(w)) inter++;
+    const containment = inter / Math.min(a.size, b.size);
+    const jaccard = inter / (a.size + b.size - inter);
+    if (containment >= 0.8 || jaccard >= 0.7) return true;
+  }
+  return false;
+}
+
 export function ensureDetail(projectPath: string): ProjectDetail {
   return detailsDb.data[projectPath] ?? { path: projectPath, items: [], notes: "" };
 }
@@ -78,9 +105,11 @@ function git(projectPath: string, args: string[]): string {
   }
 }
 
-/** Recent commit subjects — the strongest signal for what's ALREADY built. */
+/** Recent commit messages (subject + body) — the strongest signal for what's
+ *  ALREADY built. Body is included so completions described there (not just in
+ *  the one-line subject) are detectable. */
 function readGitLog(projectPath: string): string {
-  return git(projectPath, ["log", "--pretty=format:%s", "-n", "25"]);
+  return git(projectPath, ["log", "--pretty=format:%s%n%b%n-----", "-n", "15"]);
 }
 
 /**
@@ -385,9 +414,9 @@ function applyReport(detail: ProjectDetail, report: AiReport | undefined): void 
     }
   }
 
-  // 2) Add new items, skipping anything that already exists (any status) so a
-  //    done/dismissed item never resurrects and dupes never pile up.
-  const seen = new Set(detail.items.map((i) => normalize(i.text)));
+  // 2) Add new items, skipping near-duplicates of anything that already exists
+  //    (any status) so a done/dismissed item never resurrects and reworded
+  //    restatements never pile up.
   const openCount: Record<DetailItemKind, number> = { todo: 0, decision: 0, pending: 0 };
   for (const item of detail.items) if (item.status === "open") openCount[item.kind]++;
 
@@ -395,7 +424,8 @@ function applyReport(detail: ProjectDetail, report: AiReport | undefined): void 
     const kind = raw.kind as DetailItemKind;
     const text = raw.text?.trim();
     if (!text || !KINDS.includes(kind)) continue;
-    if (seen.has(normalize(text))) continue;
+    // Checks against detail.items, which includes items just pushed in this loop.
+    if (isNearDuplicate(text, detail.items)) continue;
     if (openCount[kind] >= MAX_OPEN_PER_KIND) continue;
     detail.items.push({
       id: itemId(kind, text),
@@ -406,7 +436,6 @@ function applyReport(detail: ProjectDetail, report: AiReport | undefined): void 
       createdAt: stamp,
       updatedAt: stamp,
     });
-    seen.add(normalize(text));
     openCount[kind]++;
   }
 }
