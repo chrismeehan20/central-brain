@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { Override, Project } from "@shared/types.js";
-import { runScan, getCachedProjects, getLastScanAt } from "../scan/index.js";
+import { runScan, getCachedProjects, getLastScanAt, applyOverrideToCache } from "../scan/index.js";
 import { overridesDb } from "../store/db.js";
 import { getGithubStatus } from "../poll/githubPoller.js";
 import { getCachedSummary, getOrGenerateSummary } from "../ai/summarize.js";
@@ -50,7 +50,9 @@ export async function projectsRoutes(app: FastifyInstance) {
     overridesDb.data[projectPath] = { ...existing, ...override };
     await overridesDb.write();
 
-    const projects = runScan();
+    // Patch the cache in place — a full rescan here made Hide/Unhide/Pin
+    // feel stalled for seconds.
+    const projects = applyOverrideToCache(projectPath, overridesDb.data[projectPath]);
     return { projects: withExtras(projects) };
   });
 

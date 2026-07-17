@@ -81,7 +81,8 @@ export async function getOrGenerateDigest(force = false): Promise<DailyDigest | 
           content:
             "You're helping a developer who juggles many side projects. From the last-24h activity below, write " +
             "ONE tight paragraph (3-5 sentences) telling them what moved across their projects and what most " +
-            "needs their attention next. Name the projects. No preamble, no bullet points.\n\n" +
+            "needs their attention next. Name the projects. Plain text only — no markdown, no asterisks, no " +
+            "bullet points, no preamble.\n\n" +
             context,
         },
       ],

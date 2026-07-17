@@ -69,10 +69,12 @@ export function resolveProjects(): Project[] {
     });
   }
 
-  projects.sort((a, b) => {
-    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-    return (b.lastActivity ?? "").localeCompare(a.lastActivity ?? "");
-  });
+  projects.sort(compareProjects);
 
   return projects;
+}
+
+export function compareProjects(a: Project, b: Project): number {
+  if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+  return (b.lastActivity ?? "").localeCompare(a.lastActivity ?? "");
 }

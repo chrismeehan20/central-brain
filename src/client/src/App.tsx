@@ -158,9 +158,9 @@ export default function App() {
         {...gridProps}
       />
       {missing.length > 0 && (
-        <ProjectGrid title="Missing from disk" projects={missing} {...gridProps} />
+        <ProjectGrid title="Missing from disk" projects={missing} collapsible {...gridProps} />
       )}
-      <ProjectGrid title="Hidden" projects={hidden} {...gridProps} />
+      <ProjectGrid title="Hidden" projects={hidden} collapsible {...gridProps} />
     </main>
   );
 }

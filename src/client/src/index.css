@@ -20,9 +20,8 @@
 body {
   margin: 0;
   background: var(--bg);
-  background-image: radial-gradient(circle at 20% -10%, #1a2233 0%, transparent 45%);
   color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Satoshi", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 button {
@@ -142,8 +141,8 @@ h1 {
 .attention__badge {
   font-weight: 600;
   font-size: 0.72rem;
-  border-radius: 999px;
-  padding: 0.15rem 0.6rem;
+  border-radius: 5px;
+  padding: 0.15rem 0.55rem;
   background: rgba(248, 113, 113, 0.18);
   color: var(--danger);
   white-space: nowrap;
@@ -192,11 +191,9 @@ h1 {
 
 .digest__title {
   margin: 0;
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: 0.9rem;
+  font-weight: 700;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   flex: 1;
 }
 
@@ -225,21 +222,36 @@ h1 {
 }
 
 .section__title {
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 1.05rem;
+  font-weight: 700;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   margin: 0 0 0.9rem;
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
 }
 
+.section__title--toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+
+.section__title--toggle:hover {
+  color: var(--ink);
+}
+
+.section__caret {
+  font-size: 0.8rem;
+}
+
 .section__count {
   background: var(--surface-raised);
-  border-radius: 999px;
-  padding: 0.05rem 0.55rem;
+  border-radius: 5px;
+  padding: 0.05rem 0.5rem;
   font-size: 0.75rem;
   color: var(--ink);
 }
@@ -321,8 +333,8 @@ h1 {
 .badge {
   font-size: 0.7rem;
   font-weight: 600;
-  border-radius: 999px;
-  padding: 0.15rem 0.55rem;
+  border-radius: 5px;
+  padding: 0.15rem 0.5rem;
 }
 
 .badge--claude {
@@ -388,6 +400,13 @@ h1 {
   border-color: var(--accent);
 }
 
+.doc-chip--more {
+  cursor: pointer;
+  font-family: inherit;
+  background: none;
+  border-style: dashed;
+}
+
 .card__summary {
   display: flex;
   align-items: baseline;
@@ -399,6 +418,10 @@ h1 {
 .card__summary p {
   margin: 0;
   flex: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .card__summary--empty {
@@ -541,11 +564,9 @@ h1 {
 }
 
 .detail-section__title {
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: 0.9rem;
+  font-weight: 700;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   margin: 0 0 0.8rem;
   display: flex;
   align-items: baseline;
@@ -602,9 +623,7 @@ h1 {
 .ditem__origin {
   font-size: 0.62rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  border-radius: 999px;
+  border-radius: 5px;
   padding: 0.1rem 0.4rem;
   color: var(--muted);
   background: var(--surface-raised);

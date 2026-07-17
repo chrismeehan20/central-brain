@@ -31,7 +31,12 @@ export default function ProjectCard({
   const [nameDraft, setNameDraft] = useState(project.displayName);
   const [summarizing, setSummarizing] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [showAllDocs, setShowAllDocs] = useState(false);
   const counts = toolCounts(project);
+
+  const MAX_DOC_CHIPS = 4;
+  const docs = showAllDocs ? project.markdown : project.markdown.slice(0, MAX_DOC_CHIPS);
+  const hiddenDocCount = project.markdown.length - docs.length;
 
   async function refreshSummary() {
     setSummarizing(true);
@@ -108,7 +113,7 @@ export default function ProjectCard({
 
       {project.markdown.length > 0 && (
         <div className="card__docs">
-          {project.markdown.map((doc) => (
+          {docs.map((doc) => (
             <a
               key={doc.file}
               className="doc-chip"
@@ -118,6 +123,16 @@ export default function ProjectCard({
               {doc.relativePath}
             </a>
           ))}
+          {hiddenDocCount > 0 && (
+            <button className="doc-chip doc-chip--more" onClick={() => setShowAllDocs(true)}>
+              +{hiddenDocCount} more
+            </button>
+          )}
+          {showAllDocs && project.markdown.length > MAX_DOC_CHIPS && (
+            <button className="doc-chip doc-chip--more" onClick={() => setShowAllDocs(false)}>
+              show fewer
+            </button>
+          )}
         </div>
       )}
 

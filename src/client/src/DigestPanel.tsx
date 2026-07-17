@@ -3,6 +3,13 @@ import type { DailyDigest } from "@shared/types";
 import { fetchDigest, refreshDigest } from "./api";
 import { relativeTime } from "./format";
 
+/** The model is told plain-text-only, but if **bold** slips through, render it
+ *  as actual bold instead of literal asterisks. */
+function renderDigestText(text: string) {
+  const parts = text.split(/\*\*([^*]+)\*\*/g);
+  return parts.map((part, i) => (i % 2 === 1 ? <strong key={i}>{part}</strong> : part));
+}
+
 /** One-paragraph "what moved across everything in the last 24h" panel. */
 export default function DigestPanel() {
   const [digest, setDigest] = useState<DailyDigest | null>(null);
@@ -49,7 +56,7 @@ export default function DigestPanel() {
           {refreshing ? "Refreshing…" : "Refresh"}
         </button>
       </div>
-      {digest?.text && <p className="digest__text">{digest.text}</p>}
+      {digest?.text && <p className="digest__text">{renderDigestText(digest.text)}</p>}
       {(error ?? digest?.lastError) && <p className="card__summary-error">{error ?? digest?.lastError}</p>}
     </section>
   );
