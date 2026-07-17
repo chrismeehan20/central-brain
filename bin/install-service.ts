@@ -17,12 +17,19 @@ function main() {
     process.exit(1);
   }
 
+  const logDir = path.join(os.homedir(), "Library", "Logs", "central-brain");
+  fs.mkdirSync(logDir, { recursive: true });
+
   const template = fs.readFileSync(TEMPLATE_PATH, "utf8");
-  const plist = template.replace(/{{NODE_PATH}}/g, process.execPath).replace(/{{PROJECT_DIR}}/g, PROJECT_DIR);
+  const plist = template
+    .replace(/{{NODE_PATH}}/g, process.execPath)
+    .replace(/{{PROJECT_DIR}}/g, PROJECT_DIR)
+    .replace(/{{LOG_DIR}}/g, logDir);
 
   fs.mkdirSync(path.dirname(PLIST_DEST), { recursive: true });
   fs.writeFileSync(PLIST_DEST, plist);
   console.log(`Wrote ${PLIST_DEST}`);
+  console.log(`Service logs: ${logDir}`);
 
   try {
     execFileSync("launchctl", ["unload", PLIST_DEST], { stdio: "ignore" });

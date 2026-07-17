@@ -20,9 +20,12 @@
   <true/>
   <key>KeepAlive</key>
   <true/>
+  <!-- Logs live in ~/Library/Logs, NOT the project dir: launchd itself opens
+       these files, and macOS TCC denies launchd access inside ~/Documents —
+       the job dies with EX_CONFIG (78) before the server even starts. -->
   <key>StandardOutPath</key>
-  <string>{{PROJECT_DIR}}/data/central-brain.log</string>
+  <string>{{LOG_DIR}}/central-brain.log</string>
   <key>StandardErrorPath</key>
-  <string>{{PROJECT_DIR}}/data/central-brain.error.log</string>
+  <string>{{LOG_DIR}}/central-brain.error.log</string>
 </dict>
 </plist>
