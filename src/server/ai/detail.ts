@@ -1,13 +1,14 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import { execFileSync } from "node:child_process";
-import matter from "gray-matter";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import Anthropic from "@anthropic-ai/sdk";
 import type { DetailItem, DetailItemKind, Project, ProjectDetail } from "@shared/types.js";
 import { detailsDb } from "../store/db.js";
-import { canSpend, capMessage, isDebounced, recordCall } from "./budget.js";
-
-const MODEL = "claude-haiku-4-5-20251001";
+import { AI_MODEL, canSpend, capMessage, isDebounced, recordCall } from "./budget.js";
+import { readDocBodies } from "./docBodies.js";
+import { getGithubStatus } from "../poll/githubPoller.js";
+import { bus } from "../events/bus.js";
 const KINDS: DetailItemKind[] = ["todo", "decision", "pending"];
 const MAX_OPEN_PER_KIND = 40; // guardrail against a runaway AI adding endless items
 
@@ -72,34 +73,16 @@ export function getCachedDetail(projectPath: string): ProjectDetail | undefined 
 
 // ---- Evidence the AI reasons over (planning-doc bodies + recent sessions + last commit) ----
 
-function readDocBodies(project: Project): string {
-  const wanted = project.markdown.filter((d) => /README|TODO|STATUS|PLAN|ROADMAP/i.test(d.relativePath));
-  const parts: string[] = [];
-  let budget = 6000;
-  for (const doc of wanted) {
-    if (budget <= 0) break;
-    try {
-      const body = matter(fs.readFileSync(doc.file, "utf8")).content.trim();
-      if (!body) continue;
-      const slice = body.slice(0, 1600);
-      parts.push(`### ${doc.relativePath}\n${slice}`);
-      budget -= slice.length;
-    } catch {
-      // unreadable doc — skip
-    }
-  }
-  return parts.join("\n\n");
-}
-
 const COLD_START_SESSIONS = 6;
+const execFileAsync = promisify(execFile);
 
-function git(projectPath: string, args: string[]): string {
+async function git(projectPath: string, args: string[]): Promise<string> {
   try {
-    return execFileSync("git", ["-C", projectPath, ...args], {
+    const { stdout } = await execFileAsync("git", ["-C", projectPath, ...args], {
       encoding: "utf8",
       timeout: 3000,
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
+    });
+    return stdout.trim();
   } catch {
     return ""; // not a git repo, or git unavailable
   }
@@ -108,7 +91,7 @@ function git(projectPath: string, args: string[]): string {
 /** Recent commit messages (subject + body) — the strongest signal for what's
  *  ALREADY built. Body is included so completions described there (not just in
  *  the one-line subject) are detectable. */
-function readGitLog(projectPath: string): string {
+function readGitLog(projectPath: string): Promise<string> {
   return git(projectPath, ["log", "--pretty=format:%s%n%b%n-----", "-n", "15"]);
 }
 
@@ -116,21 +99,30 @@ function readGitLog(projectPath: string): string {
  * The working-tree source files (tracked + untracked-not-ignored). This is the
  * decisive "what exists" signal: if a feature has a module here, it's BUILT —
  * which stops the model from listing shipped features as todos when the git
- * history is too coarse to reveal them.
+ * history is too coarse to reveal them. Ranked (recently-committed, then src/)
+ * before truncation so the 140-file window keeps the files most likely to
+ * prove recent work shipped.
  */
-function readCodeTree(projectPath: string): string {
-  const both = `${git(projectPath, ["ls-files"])}\n${git(projectPath, ["ls-files", "--others", "--exclude-standard"])}`;
+async function readCodeTree(projectPath: string): Promise<string> {
+  const [trackedFiles, untrackedFiles, recentLog] = await Promise.all([
+    git(projectPath, ["ls-files"]),
+    git(projectPath, ["ls-files", "--others", "--exclude-standard"]),
+    git(projectPath, ["log", "--pretty=format:", "--name-only", "-n", "30"]),
+  ]);
+  const recent = new Set(recentLog.split("\n").map((f) => f.trim()).filter(Boolean));
   const skip = /(^|\/)(node_modules|dist|build|target|data|coverage|icons|\.[^/]+)\//;
   const codey = /\.(ts|tsx|js|jsx|mjs|cjs|rs|py|go|rb|java|kt|swift|c|cpp|h|json|toml|ya?ml|md|css|scss|html|vue|svelte)$/i;
   const files = Array.from(
     new Set(
-      both
+      `${trackedFiles}\n${untrackedFiles}`
         .split("\n")
         .map((f) => f.trim())
         .filter((f) => f && !skip.test(f) && codey.test(f))
     )
-  ).slice(0, 140);
-  return files.join("\n");
+  );
+  const rank = (f: string) => (recent.has(f) ? 0 : 2) + (f.startsWith("src/") ? 0 : 1);
+  files.sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : 1));
+  return files.slice(0, 140).join("\n");
 }
 
 const TRANSCRIPT_SESSIONS = 4; // max recent sessions read verbatim
@@ -280,21 +272,35 @@ function hashInput(text: string): string {
 // ---- AI reconciliation output ----
 
 interface AiReport {
-  completed_ids?: string[];
+  completed?: Array<{ id?: string; evidence?: string }>;
   new_items?: Array<{ kind?: string; text?: string }>;
 }
+
+// Evidence must be substantive before an AI-judged completion is accepted —
+// blocks the failure where the model closes a real open item on a hunch.
+const MIN_EVIDENCE_CHARS = 10;
 
 const REPORT_TOOL: Anthropic.Tool = {
   name: "report_detail",
   description:
-    "Report which existing open items are now done, and any genuinely new todos/decisions/pending items.",
+    "Report which existing open items are now done (with proof), and any genuinely new todos/decisions/pending items.",
   input_schema: {
     type: "object",
     properties: {
-      completed_ids: {
+      completed: {
         type: "array",
-        items: { type: "string" },
-        description: "IDs of the listed OPEN items that the evidence now clearly shows are DONE.",
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "ID of a listed OPEN item the evidence now clearly shows is DONE." },
+            evidence: {
+              type: "string",
+              description:
+                "The specific commit message, file path, or discussion line that proves this item is done. Required — an item without concrete proof must not be reported as completed.",
+            },
+          },
+          required: ["id", "evidence"],
+        },
       },
       new_items: {
         type: "array",
@@ -308,7 +314,7 @@ const REPORT_TOOL: Anthropic.Tool = {
         },
       },
     },
-    required: ["completed_ids", "new_items"],
+    required: ["completed", "new_items"],
   },
 };
 
@@ -321,7 +327,8 @@ function buildPrompt(project: Project, evidence: string, openItems: DetailItem[]
     "active development — most features its docs describe already work. Surface ONLY action items that are " +
     "genuinely still open right now, then reconcile the existing list.\n\n" +
     "1) COMPLETE: from the currently-open items below, return the ids that ALREADY SHIPPED commits or recent " +
-    "activity now show are DONE.\n" +
+    "activity now show are DONE — each with the specific commit/file/discussion line proving it. No proof, no " +
+    "completion.\n" +
     "2) ADD: propose only NEW, genuinely-open items, categorized:\n" +
     "   - todo: concrete work still left to build.\n" +
     "   - decision: an open choice not yet made.\n" +
@@ -344,8 +351,17 @@ function buildPrompt(project: Project, evidence: string, openItems: DetailItem[]
 
 export async function getOrGenerateDetail(project: Project, force = false): Promise<ProjectDetail> {
   const detail = ensureDetail(project.path);
-  const shipped = readGitLog(project.path);
-  const tree = readCodeTree(project.path);
+
+  // Zero-subprocess pre-gate: newest session + doc mtimes + last-seen commit.
+  // Idle projects skip the git/doc reads below entirely, so the hourly poll
+  // over every project spawns no subprocesses when nothing moved.
+  const gh = getGithubStatus(project.path);
+  const cheap = hashInput(
+    `${project.sessions[0]?.lastActivity ?? ""}\n${project.markdown.map((d) => `${d.relativePath}:${d.mtime}`).join(",")}\n${gh?.lastCommitSha ?? ""}\n${String(gh?.dirty ?? "")}`
+  );
+  if (!force && detail.cheapHash === cheap && detail.hash) return detail;
+
+  const [shipped, tree] = await Promise.all([readGitLog(project.path), readCodeTree(project.path)]);
   const docs = readDocBodies(project);
   // Stable change-signal: only flips when the newest session, git history,
   // code tree, or doc bodies actually change — so an idle project never
@@ -353,7 +369,14 @@ export async function getOrGenerateDetail(project: Project, force = false): Prom
   const hash = hashInput(`${project.sessions[0]?.lastActivity ?? ""}\n${shipped}\n${tree}\n${docs}`);
 
   // Hourly gate: nothing changed since last generation → nothing new to learn.
-  if (!force && detail.hash === hash) return detail;
+  if (!force && detail.hash === hash) {
+    if (detail.cheapHash !== cheap) {
+      detail.cheapHash = cheap;
+      detailsDb.data[project.path] = detail;
+      await detailsDb.write();
+    }
+    return detail;
+  }
   // Debounce rapid manual refreshes.
   if (force && isDebounced(detail.generatedAt)) return detail;
 
@@ -373,7 +396,7 @@ export async function getOrGenerateDetail(project: Project, force = false): Prom
 
   try {
     const response = await anthropic.messages.create({
-      model: MODEL,
+      model: AI_MODEL,
       max_tokens: 900,
       tools: [REPORT_TOOL],
       tool_choice: { type: "tool", name: "report_detail" },
@@ -387,14 +410,21 @@ export async function getOrGenerateDetail(project: Project, force = false): Prom
 
     applyReport(detail, report);
     detail.hash = hash;
+    detail.cheapHash = cheap;
     detail.generatedAt = now();
-    detail.model = MODEL;
+    detail.model = AI_MODEL;
     detail.lastError = undefined;
     detailsDb.data[project.path] = detail;
     await detailsDb.write();
+    bus.emit("detail:update", { path: project.path, detail });
     return detail;
   } catch (err) {
     console.error("AI detail failed:", err);
+    // Surface the failure in the UI instead of silently serving stale detail.
+    // The hash is NOT stored, so the next poll retries.
+    detail.lastError = String((err as Error)?.message ?? err);
+    detailsDb.data[project.path] = detail;
+    await detailsDb.write();
     return detail;
   }
 }
@@ -403,14 +433,20 @@ function applyReport(detail: ProjectDetail, report: AiReport | undefined): void 
   if (!report) return;
   const stamp = now();
 
-  // 1) Auto-complete: mark listed open items the AI judged done.
-  const completed = new Set(report.completed_ids ?? []);
+  // 1) Auto-complete: mark listed open items the AI judged done — but only
+  //    when it cited concrete proof (evidence-gated).
+  const completed = new Map<string, string>();
+  for (const entry of report.completed ?? []) {
+    const evidence = entry.evidence?.trim() ?? "";
+    if (entry.id && evidence.length >= MIN_EVIDENCE_CHARS) completed.set(entry.id, evidence);
+  }
   for (const item of detail.items) {
     if (item.status === "open" && completed.has(item.id)) {
       item.status = "done";
       item.completedBy = "ai";
       item.completedAt = stamp;
       item.updatedAt = stamp;
+      item.completionEvidence = completed.get(item.id);
     }
   }
 

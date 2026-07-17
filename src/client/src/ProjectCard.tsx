@@ -83,6 +83,11 @@ export default function ProjectCard({
       </div>
 
       <div className="card__badges">
+        {project.missing && (
+          <span className="badge badge--missing" title="This folder no longer exists on disk (moved or deleted)">
+            folder gone
+          </span>
+        )}
         {counts.claude > 0 && <span className="badge badge--claude">Claude ×{counts.claude}</span>}
         {counts.codex > 0 && <span className="badge badge--codex">Codex ×{counts.codex}</span>}
         {project.github?.branch && (
@@ -125,7 +130,9 @@ export default function ProjectCard({
         <button className="card__summary-refresh" onClick={refreshSummary} disabled={summarizing}>
           {summarizing ? "Summarizing…" : "Refresh"}
         </button>
-        {summaryError && <span className="card__summary-error">{summaryError}</span>}
+        {(summaryError ?? project.summary?.lastError) && (
+          <span className="card__summary-error">{summaryError ?? project.summary?.lastError}</span>
+        )}
       </div>
 
       <div className="card__path" title={project.path}>

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import type { SessionRef } from "@shared/types.js";
-import { canonicalize } from "./paths.js";
+import { canonicalize, toUtcIso } from "./paths.js";
 
 const CLAUDE_PROJECTS_DIR = path.join(os.homedir(), ".claude", "projects");
 
@@ -104,7 +104,7 @@ export function scanClaudeProjects(): ScannedSessions {
         const ref: SessionRef = {
           tool: "claude",
           sessionId: entry.sessionId,
-          lastActivity: entry.modified ?? new Date(entry.fileMtime).toISOString(),
+          lastActivity: toUtcIso(entry.modified, new Date(entry.fileMtime).toISOString()),
           firstPrompt: entry.firstPrompt && entry.firstPrompt !== "No prompt" ? entry.firstPrompt : undefined,
           summary: entry.summary,
           gitBranch: entry.gitBranch,

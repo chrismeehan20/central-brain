@@ -64,6 +64,22 @@ button {
   border-color: var(--accent);
 }
 
+.topbar__search {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.5rem 0.8rem;
+  width: 240px;
+}
+
+.topbar__search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 h1 {
   font-size: 1.75rem;
   margin: 0 0 0.25rem;
@@ -157,6 +173,51 @@ h1 {
   margin-left: auto;
   color: var(--muted);
   font-size: 0.75rem;
+}
+
+.digest {
+  margin-bottom: 2.5rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+}
+
+.digest__header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.digest__title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex: 1;
+}
+
+.digest__header button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.72rem;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.digest__header button:hover {
+  color: var(--accent);
+}
+
+.digest__text {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--ink);
 }
 
 .section {
@@ -297,6 +358,11 @@ h1 {
 }
 
 .badge--ci-failure {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--danger);
+}
+
+.badge--missing {
   background: rgba(248, 113, 113, 0.15);
   color: var(--danger);
 }

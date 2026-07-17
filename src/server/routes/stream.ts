@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { AttentionItem } from "@shared/types.js";
+import type { AttentionItem, ProjectDetail } from "@shared/types.js";
 import { bus } from "../events/bus.js";
 import { getAttentionItems } from "../alert/attention.js";
 
@@ -23,11 +23,15 @@ export async function streamRoutes(app: FastifyInstance) {
     const onUpdate = (items: AttentionItem[]) => send("attention", items);
     bus.on("attention:update", onUpdate);
 
+    const onDetail = (payload: { path: string; detail: ProjectDetail }) => send("detail", payload);
+    bus.on("detail:update", onDetail);
+
     const heartbeat = setInterval(() => reply.raw.write(": heartbeat\n\n"), HEARTBEAT_MS);
 
     req.raw.on("close", () => {
       clearInterval(heartbeat);
       bus.off("attention:update", onUpdate);
+      bus.off("detail:update", onDetail);
     });
   });
 }

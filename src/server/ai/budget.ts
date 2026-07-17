@@ -4,9 +4,13 @@ import { aiUsageDb } from "../store/db.js";
 // (project summaries + project detail). All env-overridable.
 const DAILY_CAP = Number(process.env.AI_DAILY_CALL_CAP ?? 200);
 export const DEBOUNCE_MS = Number(process.env.AI_REFRESH_DEBOUNCE_MS ?? 60_000);
+export const AI_MODEL = process.env.AI_MODEL ?? "claude-haiku-4-5-20251001";
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD, local-agnostic
+export function today(): string {
+  // Local calendar date (YYYY-MM-DD) so the daily cap resets at the user's
+  // midnight, not UTC's.
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function callsToday(): number {

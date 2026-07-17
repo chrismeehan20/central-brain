@@ -8,7 +8,7 @@ const POLL_MS = 8 * 60_000; // slow cadence to respect gh/GitHub rate limits
 async function pollOnce(): Promise<void> {
   const projects = getCachedProjects();
   for (const project of projects) {
-    if (project.hidden) continue;
+    if (project.hidden || project.missing) continue; // git/gh on a dead path is pure waste
     try {
       const status = await fetchGithubStatus(project.path);
       if (status) {

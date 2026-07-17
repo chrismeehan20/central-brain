@@ -1,4 +1,4 @@
-import type { Project, Override, ProjectSummary, ProjectDetail, DetailItemKind } from "@shared/types";
+import type { Project, Override, ProjectSummary, ProjectDetail, DetailItemKind, DailyDigest } from "@shared/types";
 
 export async function fetchProjects(): Promise<{ projects: Project[]; lastScanAt: string | null }> {
   const res = await fetch("/api/projects");
@@ -22,6 +22,21 @@ export async function updateOverride(
     body: JSON.stringify({ path, override }),
   });
   if (!res.ok) throw new Error(`Failed to update override: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchDigest(): Promise<{ digest: DailyDigest | null }> {
+  const res = await fetch("/api/digest");
+  if (!res.ok) throw new Error(`Failed to load digest: ${res.status}`);
+  return res.json();
+}
+
+export async function refreshDigest(): Promise<{ digest: DailyDigest }> {
+  const res = await fetch("/api/digest/refresh", { method: "POST" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Failed to refresh digest: ${res.status}`);
+  }
   return res.json();
 }
 

@@ -70,6 +70,23 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
     };
   }, [path]);
 
+  // Live updates: the background detail poller pushes regenerated detail over
+  // SSE, so the todo/decision/pending columns never sit stale while the page
+  // is open. Notes are user-owned (the AI never writes them), so the draft is
+  // left alone.
+  useEffect(() => {
+    const source = new EventSource("/api/stream");
+    source.addEventListener("detail", (e) => {
+      try {
+        const payload = JSON.parse((e as MessageEvent).data) as { path: string; detail: ProjectDetail };
+        if (payload.path === path) setDetail(payload.detail);
+      } catch {
+        // ignore malformed frame
+      }
+    });
+    return () => source.close();
+  }, [path]);
+
   function apply(promise: Promise<ProjectDetail>) {
     promise.then(setDetail).catch((err) => setError(String((err as Error).message ?? err)));
   }
@@ -191,7 +208,10 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
                   {completed.map((item) => (
                     <li key={item.id} className="ditem ditem--done">
                       <span className="ditem__text">{item.text}</span>
-                      <span className="ditem__origin">
+                      <span
+                        className="ditem__origin"
+                        title={item.completedBy === "ai" ? item.completionEvidence : undefined}
+                      >
                         {item.status === "dismissed"
                           ? "dismissed"
                           : item.completedBy === "ai"

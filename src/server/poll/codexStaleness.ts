@@ -2,10 +2,15 @@ import fs from "node:fs";
 import { scanCodexProjects } from "../scan/codex.js";
 import { attentionDb } from "../store/db.js";
 import { bus } from "../events/bus.js";
+import { notify } from "../alert/notifier.js";
 
 const POLL_MS = 60_000;
 const STALE_AFTER_MS = 5 * 60_000; // quiet mid-session longer than this looks stuck
-const ABANDONED_AFTER_MS = 60 * 60_000; // beyond this, assume they just walked away
+const DECAY_AFTER_MS = 60 * 60_000; // beyond this, demote to a low-signal leftover instead of vanishing
+// A flag only fully clears after this long — a blocked session you don't
+// notice within the hour used to silently disappear, which dropped exactly
+// the case worth catching. Env-overridable (ms).
+const ABANDONED_AFTER_MS = Number(process.env.CODEX_ABANDONED_MS ?? 24 * 60 * 60_000);
 
 interface Tracked {
   size: number;
@@ -41,6 +46,18 @@ function upsertAttention(sessionId: string, projectPath: string): boolean {
   return true;
 }
 
+/** Demote a long-quiet flag instead of deleting it. Returns true if anything changed. */
+function decayAttention(sessionId: string): boolean {
+  const item = attentionDb.data.items.find(
+    (i) => i.sessionId === sessionId && i.type === "codex-maybe-waiting"
+  );
+  if (!item || item.priority === "none") return false;
+  item.priority = "none";
+  item.message = "Quiet for over an hour — the session probably ended, but check if you were expecting output.";
+  item.updatedAt = new Date().toISOString();
+  return true;
+}
+
 /** Returns true if any item was removed. */
 function clearAttention(sessionId: string): boolean {
   const before = attentionDb.data.items.length;
@@ -54,6 +71,7 @@ async function pollOnce(): Promise<void> {
   const sessions = scanCodexProjects();
   const now = Date.now();
   let changed = false;
+  const seen = new Set<string>();
 
   for (const [projectPath, refs] of Object.entries(sessions)) {
     for (const ref of refs) {
@@ -63,10 +81,14 @@ async function pollOnce(): Promise<void> {
       try {
         stat = fs.statSync(ref.transcriptPath);
       } catch {
+        // Rollout file vanished — stop tracking it and drop any stale flag.
+        tracked.delete(ref.transcriptPath);
+        if (clearAttention(ref.sessionId)) changed = true;
         continue;
       }
 
       const key = ref.transcriptPath;
+      seen.add(key);
       const prev = tracked.get(key);
 
       if (!prev || prev.size !== stat.size) {
@@ -84,13 +106,41 @@ async function pollOnce(): Promise<void> {
       }
 
       const quietFor = now - tracked.get(key)!.lastGrowthAt;
-      if (quietFor > STALE_AFTER_MS && quietFor < ABANDONED_AFTER_MS) {
-        if (upsertAttention(ref.sessionId, projectPath)) changed = true;
+      if (quietFor > STALE_AFTER_MS && quietFor < DECAY_AFTER_MS) {
+        if (upsertAttention(ref.sessionId, projectPath)) {
+          changed = true;
+          // Panel-only flags were easy to miss — surface stuck Codex sessions
+          // the same way Claude waiting events are surfaced.
+          notify({
+            title: "Codex may be stuck",
+            body: projectPath,
+            sound: false,
+          }).catch(() => {});
+        }
+      } else if (quietFor >= DECAY_AFTER_MS && quietFor < ABANDONED_AFTER_MS) {
+        if (decayAttention(ref.sessionId)) changed = true;
       } else if (quietFor >= ABANDONED_AFTER_MS) {
         if (clearAttention(ref.sessionId)) changed = true;
       }
     }
   }
+
+  // Evict tracker entries whose files no longer appear in the scan, so an
+  // always-on service doesn't slowly accumulate dead paths.
+  for (const key of tracked.keys()) {
+    if (!seen.has(key)) tracked.delete(key);
+  }
+
+  // Drop flags whose session vanished from the scan entirely (rollout file
+  // deleted) — otherwise they'd linger with nothing left to clear them.
+  const liveSessionIds = new Set(
+    Object.values(sessions).flatMap((refs) => refs.map((r) => r.sessionId))
+  );
+  const beforeOrphans = attentionDb.data.items.length;
+  attentionDb.data.items = attentionDb.data.items.filter(
+    (i) => i.type !== "codex-maybe-waiting" || liveSessionIds.has(i.sessionId)
+  );
+  if (attentionDb.data.items.length !== beforeOrphans) changed = true;
 
   if (changed) {
     await attentionDb.write();

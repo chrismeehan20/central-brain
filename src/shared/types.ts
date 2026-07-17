@@ -44,6 +44,16 @@ export interface ProjectSummary {
   generatedAt: string;
   model: string;
   hash: string;
+  lastError?: string; // last failed generation (API error / daily cap) — surfaced in the UI
+}
+
+export interface DailyDigest {
+  date: string; // local YYYY-MM-DD the digest covers
+  text: string;
+  generatedAt: string;
+  model: string;
+  hash: string;
+  lastError?: string;
 }
 
 export interface Override {
@@ -66,6 +76,7 @@ export interface DetailItem {
   updatedAt: string;
   completedAt?: string;
   completedBy?: "ai" | "user"; // who moved it out of "open"
+  completionEvidence?: string; // AI-completions only: the commit/file/discussion line that proved it done
   note?: string;
 }
 
@@ -74,22 +85,25 @@ export interface ProjectDetail {
   items: DetailItem[];
   notes: string; // freeform scratchpad, user-owned
   hash?: string; // hash of the last AI evidence input (hourly gate)
+  cheapHash?: string; // zero-subprocess pre-gate; skips git/doc reads when nothing moved
   generatedAt?: string; // last successful AI generation
   model?: string;
   lastError?: string; // e.g. "daily AI cap reached" — surfaced in the UI
 }
 
 export interface Project {
-  path: string; // canonical absolute path, lowercased
+  path: string; // canonical absolute path (real on-disk casing; case-insensitive merged)
   displayName: string;
   discovered: boolean; // true = auto-discovered, not yet triaged
   hidden: boolean;
   pinned: boolean;
+  missing: boolean; // true = the folder no longer exists on disk (moved/deleted)
   lastActivity?: string;
   sessions: SessionRef[];
   markdown: MarkdownDoc[];
   github?: GithubStatus;
   summary?: ProjectSummary;
+  openItems?: string[]; // open detail-item texts, for dashboard search
 }
 
 export type AttentionType =

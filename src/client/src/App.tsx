@@ -4,6 +4,7 @@ import { fetchProjects, triggerScan, updateOverride } from "./api";
 import ProjectGrid from "./ProjectGrid";
 import ProjectDetailPage from "./ProjectDetailPage";
 import AttentionPanel from "./AttentionPanel";
+import DigestPanel from "./DigestPanel";
 import { relativeTime } from "./format";
 
 const DETAIL_PREFIX = "#/project/";
@@ -23,6 +24,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [route, setRoute] = useState<string | null>(parseRoute());
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     const onHashChange = () => setRoute(parseRoute());
@@ -98,8 +100,17 @@ export default function App() {
     );
   }
 
-  const visible = projects.filter((p) => !p.hidden && !p.discovered);
-  const discovered = projects.filter((p) => !p.hidden && p.discovered);
+  const q = query.trim().toLowerCase();
+  const matches = (p: Project) =>
+    !q ||
+    p.displayName.toLowerCase().includes(q) ||
+    p.path.toLowerCase().includes(q) ||
+    (p.summary?.text ?? "").toLowerCase().includes(q) ||
+    (p.openItems ?? []).some((t) => t.toLowerCase().includes(q));
+
+  const visible = projects.filter((p) => !p.hidden && !p.discovered && !p.missing && matches(p));
+  const discovered = projects.filter((p) => !p.hidden && p.discovered && !p.missing && matches(p));
+  const missing = projects.filter((p) => p.missing && !p.hidden);
   const hidden = projects.filter((p) => p.hidden);
 
   function handleSummaryUpdated(path: string, summary: Project["summary"]) {
@@ -122,6 +133,13 @@ export default function App() {
           <p className="subtitle">Mission control for every project you're building.</p>
         </div>
         <div className="topbar__meta">
+          <input
+            className="topbar__search"
+            type="search"
+            placeholder="Search projects, summaries, todos…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
           <span className="scan-time">last scan {relativeTime(lastScanAt ?? undefined)}</span>
           <button onClick={handleRescan} disabled={scanning}>
             {scanning ? "Scanning…" : "Rescan"}
@@ -130,6 +148,7 @@ export default function App() {
       </header>
 
       <AttentionPanel />
+      <DigestPanel />
 
       <ProjectGrid title="Projects" projects={visible} {...gridProps} />
       <ProjectGrid
@@ -138,6 +157,9 @@ export default function App() {
         emptyLabel="Nothing new to triage."
         {...gridProps}
       />
+      {missing.length > 0 && (
+        <ProjectGrid title="Missing from disk" projects={missing} {...gridProps} />
+      )}
       <ProjectGrid title="Hidden" projects={hidden} {...gridProps} />
     </main>
   );

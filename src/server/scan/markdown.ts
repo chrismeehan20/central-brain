@@ -27,6 +27,30 @@ function readDoc(fullPath: string, relativePath: string): MarkdownDoc | null {
   }
 }
 
+const DOCS_MAX_DEPTH = 3;
+const DOCS_MAX_FILES = 30;
+const SKIP_DIRS = /^(node_modules|dist|build|target|coverage|\..+)$/;
+
+function walkDocsDir(dir: string, relDir: string, depth: number, docs: MarkdownDoc[]): void {
+  if (depth > DOCS_MAX_DEPTH || docs.length >= DOCS_MAX_FILES) return;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return; // no docs dir, that's fine
+  }
+  for (const entry of entries) {
+    if (docs.length >= DOCS_MAX_FILES) return;
+    const rel = path.join(relDir, entry.name);
+    if (entry.isDirectory()) {
+      if (!SKIP_DIRS.test(entry.name)) walkDocsDir(path.join(dir, entry.name), rel, depth + 1, docs);
+    } else if (entry.isFile() && entry.name.endsWith(".md")) {
+      const doc = readDoc(path.join(dir, entry.name), rel);
+      if (doc) docs.push(doc);
+    }
+  }
+}
+
 export function scanMarkdown(projectPath: string): MarkdownDoc[] {
   const docs: MarkdownDoc[] = [];
   if (!fs.existsSync(projectPath)) return docs;
@@ -36,19 +60,7 @@ export function scanMarkdown(projectPath: string): MarkdownDoc[] {
     if (doc) docs.push(doc);
   }
 
-  const docsDir = path.join(projectPath, "docs");
-  try {
-    const entries = fs.readdirSync(docsDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isFile() && entry.name.endsWith(".md")) {
-        const rel = path.join("docs", entry.name);
-        const doc = readDoc(path.join(docsDir, entry.name), rel);
-        if (doc) docs.push(doc);
-      }
-    }
-  } catch {
-    // no docs dir, that's fine
-  }
+  walkDocsDir(path.join(projectPath, "docs"), "docs", 1, docs);
 
   return docs;
 }

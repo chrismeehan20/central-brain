@@ -2,9 +2,8 @@ import crypto from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Project, ProjectSummary } from "@shared/types.js";
 import { summariesDb } from "../store/db.js";
-import { canSpend, isDebounced, recordCall } from "./budget.js";
-
-const MODEL = "claude-haiku-4-5-20251001";
+import { AI_MODEL, canSpend, capMessage, isDebounced, recordCall } from "./budget.js";
+import { readDocBodies } from "./docBodies.js";
 
 let client: Anthropic | null | undefined;
 function getClient(): Anthropic | null {
@@ -22,11 +21,28 @@ function buildContext(project: Project): string {
     .slice(0, 8)
     .map((s) => `- [${s.tool}] ${s.summary ?? s.firstPrompt ?? "(no summary)"}`)
     .join("\n");
-  return `Project: ${project.displayName}\n\nMarkdown docs present:\n${docs || "(none)"}\n\nRecent session summaries:\n${recent || "(none)"}`;
+  // Doc bodies are part of the context (and therefore the hash) so editing a
+  // README/PLAN actually regenerates the summary — headings alone miss that.
+  const bodies = readDocBodies(project, { budget: 3000, perDoc: 800 });
+  return (
+    `Project: ${project.displayName}\n\nMarkdown docs present:\n${docs || "(none)"}\n\n` +
+    `Recent session summaries:\n${recent || "(none)"}` +
+    (bodies ? `\n\nDoc contents (truncated):\n${bodies}` : "")
+  );
 }
 
 function hashInput(text: string): string {
   return crypto.createHash("sha1").update(text).digest("hex");
+}
+
+/** Persist a failure so the UI can show it. Never stores the new hash — the next poll retries. */
+async function recordFailure(projectPath: string, cached: ProjectSummary | undefined, message: string): Promise<ProjectSummary> {
+  const summary: ProjectSummary = cached
+    ? { ...cached, lastError: message }
+    : { text: "", generatedAt: "", model: AI_MODEL, hash: "", lastError: message };
+  summariesDb.data[projectPath] = summary;
+  await summariesDb.write();
+  return summary;
 }
 
 /**
@@ -45,14 +61,14 @@ export async function getOrGenerateSummary(project: Project, force = false): Pro
   // Debounce rapid manual refreshes, and never exceed the daily call cap —
   // both fall back to the cached summary without spending a token.
   if (force && isDebounced(cached?.generatedAt)) return cached;
-  if (!canSpend()) return cached;
+  if (!canSpend()) return recordFailure(project.path, cached, capMessage());
 
   const anthropic = getClient();
   if (!anthropic) return cached;
 
   try {
     const response = await anthropic.messages.create({
-      model: MODEL,
+      model: AI_MODEL,
       max_tokens: 100,
       messages: [
         {
@@ -75,13 +91,19 @@ export async function getOrGenerateSummary(project: Project, force = false): Pro
     await recordCall();
     if (!text) return cached;
 
-    const summary: ProjectSummary = { text, generatedAt: new Date().toISOString(), model: MODEL, hash };
+    const summary: ProjectSummary = {
+      text,
+      generatedAt: new Date().toISOString(),
+      model: AI_MODEL,
+      hash,
+      lastError: undefined,
+    };
     summariesDb.data[project.path] = summary;
     await summariesDb.write();
     return summary;
   } catch (err) {
     console.error("AI summary failed:", err);
-    return cached;
+    return recordFailure(project.path, cached, String((err as Error)?.message ?? err));
   }
 }
 
