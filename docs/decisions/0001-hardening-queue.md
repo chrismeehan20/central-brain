@@ -40,11 +40,17 @@ nowhere in the product.
    That file **already exists on this machine** (wired to Better Peacock's
    `agent-beacon.cjs`) — Central Brain simply isn't using it. The entire
    154-line mtime-growth heuristic is obsolete.
-2. **`scan/claude.ts:94` prefers `sessions-index.json`.** That file no longer
+2. ~~**`scan/claude.ts:94` prefers `sessions-index.json`.** That file no longer
    exists anywhere under `~/.claude`, so every scan falls through to
    `claude.ts:125-151`, which `readFileSync`s every transcript in full and
    silently drops any session whose first user line lacks `cwd`
-   (`claude.ts:138`) — the "projects randomly missing" bug.
+   (`claude.ts:138`) — the "projects randomly missing" bug.~~
+
+   **Retracted — see "Correction: what Loop 3 is actually for" below.** The
+   original `find` used `-maxdepth 2`; the index files sit at depth 3. They do
+   exist, the fallback is not universal, and the drop affects 1 session, not
+   many. The real defect is the cost of the read, which is far larger than
+   first described.
 
 ### Two more findings
 
@@ -56,6 +62,59 @@ nowhere in the product.
   popover hardcoded to `http://localhost:4317`. They know nothing about each
   other, so when the server is down the popover is a silently-blank webview.
   A status dashboard that cannot report its own status.
+
+### Correction: what Loop 3 is actually for
+
+Measured against the real `~/.claude` before writing any code, three of the
+original claims about `scan/claude.ts` were wrong. Recorded here rather than
+quietly rescoped, because the queue's credibility depends on the findings being
+checkable.
+
+**Wrong: "`sessions-index.json` no longer exists anywhere."** It exists in **13
+of 54** project directories. The original `find` used `-maxdepth 2`; the files
+sit at depth 3 (`projects/<dir>/sessions-index.json`). The index code path at
+`claude.ts:94-116` is live, not dead.
+
+**Wrong: "every scan falls through to the raw-transcript path."** It falls
+through for the other 41 directories only.
+
+**Wrong: "silently drops any session whose first user line lacks `cwd`" framed
+as the 'projects randomly missing' bug.** Real, but it affects **1 of 268**
+transcripts, and **0 of 54** directories fail to resolve entirely. Worth fixing
+cheaply; not the headline.
+
+**Also wrong to plan: deleting the index path.** The existing comment ("survives
+transcript auto-cleanup") is correct and load-bearing. Those 13 indexes are
+stale in date terms (Jan–Feb 2026) but they are the *only* remaining record of
+sessions whose `.jsonl` files have since been auto-deleted — e.g. one directory
+has 9 index entries and 0 transcripts. Deleting that path would silently erase
+pre-February history. It stays.
+
+**The real defect, quantified.** `firstUserLineInfo` (`claude.ts:46-73`)
+`readFileSync`s each transcript in full and splits it into a line array, purely
+to find the first line carrying `cwd`:
+
+| Measured on this machine | |
+|---|---|
+| Top-level transcripts | 268 |
+| **Read in full per scan** | **625 MB** |
+| Transcripts > 5 MB | 29 |
+| Largest single transcript | **63 MB** |
+| `scanClaudeProjects()` wall time | **~1,170 ms** (1173 / 1150 / 1183 over 3 runs) |
+| Resolved | 50 projects, 371 sessions |
+
+`scanClaudeProjects` is **synchronous**, called synchronously from
+`resolveProjects()`, so that ~1.2 s is a hard block of the Node event loop — the
+API serves nothing while it runs. It fires on the interval scan *and* on
+chokidar watcher events. Repeated multi-second stalls of a dashboard whose job
+is live status is a much better explanation of "quirky and unreliable" than a
+single dropped session.
+
+**Loop 3 rescoped to:** bounded reads instead of whole-file reads (the win),
+plus the cheap sibling-`cwd` fallback for the 1 dropped session. The index path
+is kept. The sidechain-filtering concern is **dropped** — `isSidechain:true`
+appears in 0 of 60 sampled transcripts, so there is no evidence the raw path
+needs it, and adding a filter for a field that never appears is speculative.
 
 ### Newly available upstream capability (unused)
 
@@ -151,7 +210,7 @@ ask before risky calls.
 |---|---|---|---|---|
 | 1 | CI gate: workflow (typecheck + build), `dependabot.yml` with `update-types: [minor, patch]`, gitignore `.vscode/` | simple | **merged** | [#1](https://github.com/chrismeehan20/central-brain/pull/1) |
 | 2 | Test harness: `node:test` via `tsx` (no new deps), `npm test` in CI, first tests for `paths.ts` + `markdown.ts` | simple | **merged** | [#10](https://github.com/chrismeehan20/central-brain/pull/10) |
-| 3 | Fix Claude scanner: drop dead `sessions-index.json` path, bounded reads instead of whole-file `readFileSync`, stop dropping sessions with no `cwd` on the first user line, filter sidechains | ordinary | queued | — |
+| 3 | Claude scanner: **bounded reads** (625 MB / ~1,170 ms blocking per scan today), plus sibling-`cwd` fallback. **Keeps** the `sessions-index.json` path — see the correction above | ordinary | **in progress** | — |
 | 4 | Wire Codex hooks (append to `~/.codex/hooks.json`, must not clobber Better Peacock); read `state_5.sqlite` `threads`; **delete `codexStaleness.ts`** | ordinary | queued | — |
 | 5 | Tauri sidecar: bundle server as `externalBin`, spawn from `lib.rs` setup, probe-then-attach health check, `tauri-plugin-autostart`, remove launchd + `install-service`/`uninstall-service` | hard | queued | — |
 | 6 | Hook-event spooling + drain on startup (closes the D1 gap) | ordinary | queued | — |
@@ -160,7 +219,8 @@ ask before risky calls.
 | 9 | OTel ingest — **must not use port 4317**, that is the dashboard's port and the OTLP gRPC default | ordinary | queued | — |
 | 10 | Remote approve/deny via `PreToolUse` hold + dashboard decision | ordinary | queued | — |
 | 11 | Session replay + full-text search over the event store | ordinary | queued | — |
-| 12 | Resolve remaining high-severity advisories: `brace-expansion`, `fast-uri`, `find-my-way`, `postcss` — all have non-major fixes | simple | **promoted, see Stage 0** | — |
+| 12 | Resolve remaining high-severity advisories: `fast-uri`, `find-my-way`, `postcss` — all have non-major fixes | simple | queued | — |
+| 13 | Cache transcript metadata by `birthtimeMs` the way `codex.ts:20` already does — the first line of an append-only transcript never changes, so the steady-state scan can go from 39.5 MB to near zero. Surfaced by Loop 3 | ordinary | queued | — |
 
 Loop 2 was inserted after Loop 1 opened: the gate was typecheck + build over 4,622
 lines with **zero tests**, which is too weak to protect the storage replacement in
