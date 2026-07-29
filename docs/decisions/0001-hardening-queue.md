@@ -86,19 +86,21 @@ everything derived from disk rebuilds on next scan — Claude transcripts, Codex
 written by other processes and re-read fresh. The only losses are **pushed**
 signals: hook POSTs to a dead port, and OTel (a push protocol).
 
-Consequence: **Loop 5 adds hook-event spooling** — the hook script appends to
+Consequence: **Loop 6 adds hook-event spooling** — the hook script appends to
 `~/.central-brain/spool/*.jsonl` *and* attempts the POST; the server drains the
 spool on startup. Hook events become durable regardless of whether the server
-is up. This was added specifically to make D1 safe, and is why the queue is 10
-loops rather than 9.
+is up. This was added specifically to make D1 safe, and is one of the two loops
+the queue grew beyond the 9 originally scoped.
 
 OTel gaps are accepted: metrics are for trends, not alerts, and the same facts
 are derivable from transcripts + ccusage.
 
 ### D2 — Scope: everything in one queue
 
-All 10 loops run in this queue (reliability first, then features), rather than
-stopping after the reliability set for re-approval.
+All loops run in this one queue (reliability first, then features), rather than
+stopping after the reliability set for re-approval. Scoped at 9 when ratified;
+now 12, having grown by the hook-spooling loop that D1 requires, the test
+harness (Loop 2), and the `shell-quote` advisories found during Loop 1.
 
 ### D3 — Data: fresh start
 
@@ -138,8 +140,8 @@ restored to a clean diff), so a green `npm test` means something.
 ## Queue
 
 One loop in flight, ever. Each item is independently shippable and revertible.
-Ordered easiest → hardest, with practical value pulled early (Loop 4 gets the
-app reliably running before the big storage surgery in Loop 6).
+Ordered easiest → hardest, with practical value pulled early (Loop 5 gets the
+app reliably running before the big storage surgery in Loop 7).
 
 Model tiers per the build-loop policy: `simple` = Sonnet maker,
 `ordinary` = Opus maker, `hard` = orchestrator implements directly, plan first,
@@ -173,7 +175,7 @@ Loop 7. Everything below it shifted down by one.
 ### Stop conditions
 
 - CI fails twice on the same error → stop, report diagnosis.
-- A `hard`-tier loop (4, 6) reaches a risky decision point → ask before
+- A `hard`-tier loop (5, 7) reaches a risky decision point → ask before
   acting. Deferral with documented rationale is a valid completion.
 
 ---
