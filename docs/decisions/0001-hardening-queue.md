@@ -160,7 +160,7 @@ ask before risky calls.
 | 9 | OTel ingest — **must not use port 4317**, that is the dashboard's port and the OTLP gRPC default | ordinary | queued | — |
 | 10 | Remote approve/deny via `PreToolUse` hold + dashboard decision | ordinary | queued | — |
 | 11 | Session replay + full-text search over the event store | ordinary | queued | — |
-| 12 | Resolve 7 high-severity advisories: `shell-quote` via `concurrently` (devDependency — `npm run dev` only, not in the shipped app) | simple | **superseded by S0-9** | — |
+| 12 | Resolve remaining high-severity advisories: `brace-expansion`, `fast-uri`, `find-my-way`, `postcss` — all have non-major fixes | simple | **promoted, see Stage 0** | — |
 
 Loop 2 was inserted after Loop 1 opened: the gate was typecheck + build over 4,622
 lines with **zero tests**, which is too weak to protect the storage replacement in
@@ -187,10 +187,10 @@ executed rather than assuming it from a green tick.
 | S0-4 | [#4](https://github.com/chrismeehan20/central-brain/pull/4) | npm minor/patch group: `@anthropic-ai/sdk` 0.32.1→0.115.0, `tsx` 4.19.2→4.23.1 | simple | **merged** |
 | S0-7 | [#7](https://github.com/chrismeehan20/central-brain/pull/7) | cargo minor/patch group in `/src-tauri` (`Cargo.lock` only, transitive patches) | simple | **merged** |
 | S0-6 | [#6](https://github.com/chrismeehan20/central-brain/pull/6) | `typescript` 5.9.3→**7.0.2** | hard | **deferred, closed** |
-| S0-9 | [#9](https://github.com/chrismeehan20/central-brain/pull/9) | `concurrently` 9.2.3→10.0.4 — also clears the 7 `shell-quote` advisories, superseding Loop 12 | simple | queued |
+| S0-9 | [#9](https://github.com/chrismeehan20/central-brain/pull/9) | `concurrently` 9.2.3→10.0.4 — clears the `shell-quote` advisories (7 high → 5) | simple | **merged** |
 | S0-3 | [#3](https://github.com/chrismeehan20/central-brain/pull/3) | `actions/checkout` 4→7 | simple | queued |
 | S0-2 | [#2](https://github.com/chrismeehan20/central-brain/pull/2) | `actions/setup-node` 4→7 | simple | queued |
-| S0-5 | [#5](https://github.com/chrismeehan20/central-brain/pull/5) | `@fastify/static` 8.3.0→10.1.2 | ordinary | queued — **after** Loop 7 |
+| S0-5 | [#5](https://github.com/chrismeehan20/central-brain/pull/5) | `@fastify/static` 8.3.0→10.1.2 — **security fix, 4 high advisories** | ordinary | **promoted to next** |
 | S0-8 | [#8](https://github.com/chrismeehan20/central-brain/pull/8) | `react` + `@types/react` major | ordinary | queued — **after** Loop 7 |
 
 ### Two things Stage 0 surfaced that a green tick would have hidden
@@ -226,6 +226,30 @@ valid outcome for a hard-tier item.
 simple loops. `@fastify/static` (S0-5) and React (S0-8) wait until after the
 reliability work, because Loops 3–7 rewrite the server routes and storage those
 two touch — bumping them first would only mean rebasing them under later loops.
+
+#### D5a — amended: `@fastify/static` promoted to next
+
+D5 parked S0-5 on the assumption it was a routine library major. It is not.
+Running `npm audit` after merging S0-9 showed `@fastify/static` **≤10.1.1**
+carrying **four high advisories**:
+
+- path traversal in directory listing
+- route guard bypass via encoded path separators
+- authorization bypass via non-canonical URL paths
+- route guard bypass via path traversal
+
+This is a **runtime** dependency — it serves the dashboard client and is the
+component that decides which files on disk a request can reach. `10.1.2` is the
+fix, and it is exactly what S0-5 bumps to. Deferring a path-traversal fix behind
+five loops of unrelated refactoring was the wrong call on the wrong premise, so
+S0-5 is promoted ahead of Loop 3.
+
+Scope is genuinely limited — the server binds `127.0.0.1` (`server/index.ts`)
+and `fastifyStatic` is registered with a single root and `wildcard: false` — so
+this is local-only exposure, not internet-facing. Promoted rather than treated as
+an emergency.
+
+React (S0-8) stays parked per the original D5 reasoning; it carries no advisories.
 
 ---
 
