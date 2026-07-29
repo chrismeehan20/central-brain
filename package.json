@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "concurrently -n server,client -c blue,green \"tsx watch src/server/index.ts\" \"vite\"",
-    "build": "vite build && tsc -p tsconfig.json",
+    "build": "vite build && tsc -p tsconfig.build.json",
     "start": "node dist/server/index.js",
     "install-hooks": "tsx bin/install-hooks.ts",
     "uninstall-hooks": "tsx bin/uninstall-hooks.ts",
@@ -18,7 +18,8 @@
     "tauri": "tauri",
     "menubar": "tauri dev",
     "menubar:build": "npm run build && tauri build",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.bin.json"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.bin.json",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
