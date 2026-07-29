@@ -9,6 +9,12 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # TypeScript 7 is the native (Go) compiler rewrite, not an ordinary
+      # major. Deferred deliberately in docs/decisions/0001-hardening-queue.md
+      # (PR #6 closed) — remove this entry when taking it on as its own loop.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: cargo
     directory: "/src-tauri"
