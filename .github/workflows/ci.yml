@@ -1,0 +1,33 @@
+name: CI
+
+# Node/TypeScript gate for this repo. The Rust/Tauri build (src-tauri/) is
+# deliberately NOT included here: it needs a macOS runner and its own
+# minutes budget, and this Node gate is what every queued loop actually
+# touches. Do not add a Rust job to this workflow.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm run build
