@@ -128,6 +128,11 @@ Baseline recorded 2026-07-29 before any changes, on Node v22.18.0:
 Test count must never fall below baseline. Where a loop can add cheap
 regression coverage for a bug it fixes, it should.
 
+Updated by Loop 2 — the gate is now `npm ci` + `npm run typecheck` + `npm test` +
+`npm run build`, and the test floor is **12**. The harness was mutation-checked
+before landing (breaking `toUtcIso`'s fallback produced exit 1 / 1 failure, then
+restored to a clean diff), so a green `npm test` means something.
+
 ---
 
 ## Queue
@@ -142,21 +147,26 @@ ask before risky calls.
 
 | # | Loop | Tier | Status | PR |
 |---|---|---|---|---|
-| 1 | CI gate: workflow (typecheck + build), `dependabot.yml` with `update-types: [minor, patch]`, gitignore `.vscode/` | simple | **in progress** | — |
-| 2 | Fix Claude scanner: drop dead `sessions-index.json` path, stream transcripts line-by-line, stop dropping sessions with no `cwd` on the first user line | ordinary | queued | — |
-| 3 | Wire Codex hooks (append to `~/.codex/hooks.json`, must not clobber Better Peacock); read `state_5.sqlite` `threads`; **delete `codexStaleness.ts`** | ordinary | queued | — |
-| 4 | Tauri sidecar: bundle server as `externalBin`, spawn from `lib.rs` setup, probe-then-attach health check, `tauri-plugin-autostart`, remove launchd + `install-service`/`uninstall-service` | hard | queued | — |
-| 5 | Hook-event spooling + drain on startup (closes the D1 gap) | ordinary | queued | — |
-| 6 | lowdb → SQLite/WAL, event-sourced (derive status by query, delete the decay/orphan state machine); fresh DB per D3 | hard | queued | — |
-| 7 | ccusage integration: token + cost per project for both CLIs (subprocess, like `gh`) | simple | queued | — |
-| 8 | OTel ingest — **must not use port 4317**, that is the dashboard's port and the OTLP gRPC default | ordinary | queued | — |
-| 9 | Remote approve/deny via `PreToolUse` hold + dashboard decision | ordinary | queued | — |
-| 10 | Session replay + full-text search over the event store | ordinary | queued | — |
-| 11 | Resolve 7 high-severity advisories: `shell-quote` via `concurrently` (devDependency — `npm run dev` only, not in the shipped app) | simple | queued | — |
+| 1 | CI gate: workflow (typecheck + build), `dependabot.yml` with `update-types: [minor, patch]`, gitignore `.vscode/` | simple | **merged** | [#1](https://github.com/chrismeehan20/central-brain/pull/1) |
+| 2 | Test harness: `node:test` via `tsx` (no new deps), `npm test` in CI, first tests for `paths.ts` + `markdown.ts` | simple | **in progress** | — |
+| 3 | Fix Claude scanner: drop dead `sessions-index.json` path, bounded reads instead of whole-file `readFileSync`, stop dropping sessions with no `cwd` on the first user line, filter sidechains | ordinary | queued | — |
+| 4 | Wire Codex hooks (append to `~/.codex/hooks.json`, must not clobber Better Peacock); read `state_5.sqlite` `threads`; **delete `codexStaleness.ts`** | ordinary | queued | — |
+| 5 | Tauri sidecar: bundle server as `externalBin`, spawn from `lib.rs` setup, probe-then-attach health check, `tauri-plugin-autostart`, remove launchd + `install-service`/`uninstall-service` | hard | queued | — |
+| 6 | Hook-event spooling + drain on startup (closes the D1 gap) | ordinary | queued | — |
+| 7 | lowdb → SQLite/WAL, event-sourced (derive status by query, delete the decay/orphan state machine); fresh DB per D3 | hard | queued | — |
+| 8 | ccusage integration: token + cost per project for both CLIs (subprocess, like `gh`) | simple | queued | — |
+| 9 | OTel ingest — **must not use port 4317**, that is the dashboard's port and the OTLP gRPC default | ordinary | queued | — |
+| 10 | Remote approve/deny via `PreToolUse` hold + dashboard decision | ordinary | queued | — |
+| 11 | Session replay + full-text search over the event store | ordinary | queued | — |
+| 12 | Resolve 7 high-severity advisories: `shell-quote` via `concurrently` (devDependency — `npm run dev` only, not in the shipped app) | simple | queued | — |
+
+Loop 2 was inserted after Loop 1 opened: the gate was typecheck + build over 4,622
+lines with **zero tests**, which is too weak to protect the storage replacement in
+Loop 7. Everything below it shifted down by one.
 
 ### Parked work
 
-- `git stash` entry `loop-4 sidecar: serve dist/client in dev` — the
+- `git stash` entry `loop-4 sidecar: serve dist/client in dev` (belongs to Loop 5 after renumbering) — the
   uncommitted `src/server/index.ts` change that makes Fastify serve
   `dist/client` outside prod. Belongs to Loop 4; unstash there.
 
