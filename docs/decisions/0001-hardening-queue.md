@@ -150,7 +150,7 @@ ask before risky calls.
 | # | Loop | Tier | Status | PR |
 |---|---|---|---|---|
 | 1 | CI gate: workflow (typecheck + build), `dependabot.yml` with `update-types: [minor, patch]`, gitignore `.vscode/` | simple | **merged** | [#1](https://github.com/chrismeehan20/central-brain/pull/1) |
-| 2 | Test harness: `node:test` via `tsx` (no new deps), `npm test` in CI, first tests for `paths.ts` + `markdown.ts` | simple | **in progress** | — |
+| 2 | Test harness: `node:test` via `tsx` (no new deps), `npm test` in CI, first tests for `paths.ts` + `markdown.ts` | simple | **merged** | [#10](https://github.com/chrismeehan20/central-brain/pull/10) |
 | 3 | Fix Claude scanner: drop dead `sessions-index.json` path, bounded reads instead of whole-file `readFileSync`, stop dropping sessions with no `cwd` on the first user line, filter sidechains | ordinary | queued | — |
 | 4 | Wire Codex hooks (append to `~/.codex/hooks.json`, must not clobber Better Peacock); read `state_5.sqlite` `threads`; **delete `codexStaleness.ts`** | ordinary | queued | — |
 | 5 | Tauri sidecar: bundle server as `externalBin`, spawn from `lib.rs` setup, probe-then-attach health check, `tauri-plugin-autostart`, remove launchd + `install-service`/`uninstall-service` | hard | queued | — |
@@ -160,11 +160,74 @@ ask before risky calls.
 | 9 | OTel ingest — **must not use port 4317**, that is the dashboard's port and the OTLP gRPC default | ordinary | queued | — |
 | 10 | Remote approve/deny via `PreToolUse` hold + dashboard decision | ordinary | queued | — |
 | 11 | Session replay + full-text search over the event store | ordinary | queued | — |
-| 12 | Resolve 7 high-severity advisories: `shell-quote` via `concurrently` (devDependency — `npm run dev` only, not in the shipped app) | simple | queued | — |
+| 12 | Resolve 7 high-severity advisories: `shell-quote` via `concurrently` (devDependency — `npm run dev` only, not in the shipped app) | simple | **superseded by S0-9** | — |
 
 Loop 2 was inserted after Loop 1 opened: the gate was typecheck + build over 4,622
 lines with **zero tests**, which is too weak to protect the storage replacement in
 Loop 7. Everything below it shifted down by one.
+
+## Stage 0 — Dependabot hygiene
+
+Recorded as **N/A** when the queue opened (no `dependabot.yml`, zero open PRs).
+Landing the config in Loop 1 immediately produced **8 PRs**, so Stage 0 became
+live mid-run and was worked before Loop 3.
+
+The config proved itself: 2 PRs arrived as grouped minor/patch and **6 majors
+arrived individually**. Had they been grouped the old way, TypeScript 7 alone
+would have held back every safe bump in the same group.
+
+All 8 were opened against pre-Loop-2 main, so their green checks were **stale** —
+they had never run `npm test`. Caught by running the full gate locally on #4,
+which failed with `Missing script: "test"`. Each was rebased before merging so
+CI ran the real gate; step lists were checked to confirm `npm test` actually
+executed rather than assuming it from a green tick.
+
+| ID | PR | Change | Tier | Status |
+|---|---|---|---|---|
+| S0-4 | [#4](https://github.com/chrismeehan20/central-brain/pull/4) | npm minor/patch group: `@anthropic-ai/sdk` 0.32.1→0.115.0, `tsx` 4.19.2→4.23.1 | simple | **merged** |
+| S0-7 | [#7](https://github.com/chrismeehan20/central-brain/pull/7) | cargo minor/patch group in `/src-tauri` (`Cargo.lock` only, transitive patches) | simple | **merged** |
+| S0-6 | [#6](https://github.com/chrismeehan20/central-brain/pull/6) | `typescript` 5.9.3→**7.0.2** | hard | **deferred, closed** |
+| S0-9 | [#9](https://github.com/chrismeehan20/central-brain/pull/9) | `concurrently` 9.2.3→10.0.4 — also clears the 7 `shell-quote` advisories, superseding Loop 12 | simple | queued |
+| S0-3 | [#3](https://github.com/chrismeehan20/central-brain/pull/3) | `actions/checkout` 4→7 | simple | queued |
+| S0-2 | [#2](https://github.com/chrismeehan20/central-brain/pull/2) | `actions/setup-node` 4→7 | simple | queued |
+| S0-5 | [#5](https://github.com/chrismeehan20/central-brain/pull/5) | `@fastify/static` 8.3.0→10.1.2 | ordinary | queued — **after** Loop 7 |
+| S0-8 | [#8](https://github.com/chrismeehan20/central-brain/pull/8) | `react` + `@types/react` major | ordinary | queued — **after** Loop 7 |
+
+### Two things Stage 0 surfaced that a green tick would have hidden
+
+1. **#4 carried a de-facto major.** `@anthropic-ai/sdk` **0.32.1 → 0.115.0** is
+   83 releases, classified "minor" only because 0.x semver permits breaking
+   changes in minors. It landed in the safe group by that technicality. Merged
+   after confirming the only call sites are `new Anthropic({ apiKey })` and
+   `messages.create({ model, … })` (`ai/summarize.ts`, `ai/detail.ts`,
+   `ai/digest.ts`), which are stable across that range, and that all three
+   tsconfig projects still typecheck against it.
+2. **CI cannot validate Cargo changes.** `ci.yml` deliberately excludes the
+   Rust build, so #7's green tick said nothing about `src-tauri`. Verified
+   separately with `cargo check --locked` (exit 0) before merging. **Any future
+   cargo PR needs the same local step** — a green CI on a `Cargo.lock`-only
+   diff is meaningless.
+
+### D4 — TypeScript 7 deferred
+
+TypeScript 7 is the native (Go) compiler rewrite, not an ordinary major. This
+repo puts its whole toolchain on TypeScript: four tsconfig projects, a Vite
+React plugin, and the `tsx` loader the test runner depends on. A 12-test floor
+is thin cover for a compiler swap, and nothing in this queue requires TS 7.
+
+`#6` closed, and `dependabot.yml` now ignores the `typescript` major so it does
+not reopen weekly. Revisit deliberately after Loop 7 (storage) lands; remove the
+ignore entry at that point. Deferral with documented rationale is an explicit
+valid outcome for a hard-tier item.
+
+### D5 — Remaining majors folded in by risk
+
+`concurrently` (S0-9) and the two GitHub Actions majors (S0-3, S0-2) run now as
+simple loops. `@fastify/static` (S0-5) and React (S0-8) wait until after the
+reliability work, because Loops 3–7 rewrite the server routes and storage those
+two touch — bumping them first would only mean rebasing them under later loops.
+
+---
 
 ### Parked work
 
@@ -182,9 +245,10 @@ Loop 7. Everything below it shifted down by one.
 
 ## Log
 
-- **2026-07-29** — Queue opened. Stage 0 (Dependabot hygiene) **N/A**: no
+- **2026-07-29** — Queue opened. Stage 0 (Dependabot hygiene) **N/A at open**: no
   `.github/dependabot.yml`, zero open PRs, nothing to triage. Loop 1 adds the
-  config so future majors arrive as individual PRs.
+  config so future majors arrive as individual PRs. *(Superseded the same day —
+  that config produced 8 PRs and Stage 0 became live; see the Stage 0 section.)*
 - **2026-07-29** — `npm audit` during Loop 1 verification reported **7 high**
   severity advisories, all `shell-quote` reached via `concurrently`. That is a
   devDependency used only by `npm run dev`, so the shipped app is unaffected —
