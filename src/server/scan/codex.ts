@@ -1,11 +1,34 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { StringDecoder } from "node:string_decoder";
 import type { SessionRef } from "@shared/types.js";
 import { canonicalize } from "./paths.js";
 
 const CODEX_SESSIONS_DIR = path.join(os.homedir(), ".codex", "sessions");
 const SESSION_INDEX_FILE = path.join(os.homedir(), ".codex", "session_index.jsonl");
+
+/**
+ * The `session_meta` first line of a rollout file is not small: it embeds
+ * Codex's full `base_instructions` text, so across the 327 rollout files on a
+ * real machine it measured min 3.2 KB / median 15.3 KB / p90 21.5 KB /
+ * max 41.4 KB. A fixed 8 KiB read truncated 323 of those 327 lines mid-string,
+ * `JSON.parse` threw, and every one of those sessions was silently dropped.
+ *
+ * So read forward in chunks until the first newline instead of using a fixed
+ * window. 64 KiB is one comfortable read syscall and already contains the
+ * whole first line for every rollout file observed, so the common case is a
+ * single read. 1 MiB is the give-up cap: ~24x the largest real first line, so
+ * `base_instructions` can grow a lot before it bites, while still bounding a
+ * corrupt or newline-free file to 1 MiB instead of slurping a rollout file
+ * that can be tens of megabytes.
+ */
+const READ_CHUNK_BYTES = 64 * 1024;
+const MAX_SCAN_BYTES = 1024 * 1024;
+
+// Reused across calls: scanning is synchronous and single-threaded, so the
+// buffer never has two readers at once.
+const readBuffer = Buffer.allocUnsafe(READ_CHUNK_BYTES);
 
 interface RolloutMeta {
   id: string;
@@ -38,33 +61,72 @@ function walkRolloutFiles(dir: string): string[] {
   return out;
 }
 
-function readSessionMeta(filePath: string): RolloutMeta | null {
+function parseSessionMeta(line: string): RolloutMeta | null {
+  if (!line.trim()) return null;
+  let obj: any;
   try {
-    const fd = fs.openSync(filePath, "r");
-    const buf = Buffer.alloc(8192);
-    const bytesRead = fs.readSync(fd, buf, 0, buf.length, 0);
-    fs.closeSync(fd);
-    const text = buf.toString("utf8", 0, bytesRead);
-    const firstLine = text.split("\n")[0];
-    const obj = JSON.parse(firstLine);
-    if (obj.type === "session_meta" && obj.payload) {
-      return {
-        id: obj.payload.id,
-        cwd: obj.payload.cwd,
-        originator: obj.payload.originator,
-        source: obj.payload.source,
-      };
-    }
+    obj = JSON.parse(line);
   } catch {
-    // first line may be incomplete on a just-created file; skip for now
+    // Truncated or malformed first line (e.g. a rollout file caught mid-write).
+    return null;
+  }
+  if (obj?.type !== "session_meta" || !obj.payload) return null;
+  return {
+    id: obj.payload.id,
+    cwd: obj.payload.cwd,
+    originator: obj.payload.originator,
+    source: obj.payload.source,
+  };
+}
+
+/**
+ * Reads the whole first line of a rollout file, however long it is, and parses
+ * it as `session_meta`. Bounded by MAX_SCAN_BYTES so a file with no newline at
+ * all can't be slurped entirely. Stays synchronous because
+ * `scanCodexProjects()` is called synchronously from `resolveProjects()`.
+ */
+function readSessionMeta(filePath: string): RolloutMeta | null {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(filePath, "r");
+    const decoder = new StringDecoder("utf8");
+    let pending = "";
+    let scanned = 0;
+
+    while (scanned < MAX_SCAN_BYTES) {
+      const want = Math.min(READ_CHUNK_BYTES, MAX_SCAN_BYTES - scanned);
+      const bytesRead = fs.readSync(fd, readBuffer, 0, want, null);
+      if (bytesRead === 0) {
+        // EOF with no newline: what we have is a complete final line, so parse it.
+        return parseSessionMeta(pending + decoder.end());
+      }
+      scanned += bytesRead;
+      // StringDecoder keeps multi-byte characters straddling a chunk boundary
+      // intact - `cwd` and prompt text can contain non-ASCII.
+      pending += decoder.write(readBuffer.subarray(0, bytesRead));
+
+      const newline = pending.indexOf("\n");
+      if (newline !== -1) return parseSessionMeta(pending.slice(0, newline));
+    }
+    // Hit the cap without a newline: never parse a knowingly truncated line.
+  } catch {
+    // unreadable file, skip
+  } finally {
+    if (fd !== undefined) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // already gone
+      }
+    }
   }
   return null;
 }
 
-function readThreadNames(): Map<string, string> {
+function readThreadNames(sessionIndexFile: string): Map<string, string> {
   const map = new Map<string, string>();
   try {
-    const raw = fs.readFileSync(SESSION_INDEX_FILE, "utf8");
+    const raw = fs.readFileSync(sessionIndexFile, "utf8");
     for (const line of raw.split("\n")) {
       if (!line.trim()) continue;
       try {
@@ -87,13 +149,19 @@ export type ScannedSessions = Record<string, SessionRef[]>;
  * store, confirmed via `source`/`originator` fields). Codex has no
  * sessions-index-style cwd shortcut, so every rollout file's first line
  * (session_meta) is read once and cached by birthtime.
+ *
+ * `sessionsDir` and `sessionIndexFile` are injectable so tests can point the
+ * scan at a fixture tree.
  */
-export function scanCodexProjects(): ScannedSessions {
+export function scanCodexProjects(
+  sessionsDir: string = CODEX_SESSIONS_DIR,
+  sessionIndexFile: string = SESSION_INDEX_FILE,
+): ScannedSessions {
   const result: ScannedSessions = {};
-  if (!fs.existsSync(CODEX_SESSIONS_DIR)) return result;
+  if (!fs.existsSync(sessionsDir)) return result;
 
-  const threadNames = readThreadNames();
-  const files = walkRolloutFiles(CODEX_SESSIONS_DIR);
+  const threadNames = readThreadNames(sessionIndexFile);
+  const files = walkRolloutFiles(sessionsDir);
 
   for (const file of files) {
     let stat: fs.Stats;
