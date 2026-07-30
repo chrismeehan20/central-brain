@@ -274,7 +274,8 @@ ask before risky calls.
 | 3 | Claude scanner: **bounded reads** (625 MB / ~1,170 ms blocking per scan today), plus sibling-`cwd` fallback. **Keeps** the `sessions-index.json` path — see the correction above | ordinary | **in progress** | — |
 | 4a | **Fix the `session_meta` truncated read** — 8 KiB buffer vs p50 15 KB first lines was silently dropping 323 of 327 Codex sessions | ordinary | **in progress** | — |
 | 4b | Enrich Codex sessions from `state_*.sqlite` `threads` (`tokens_used`, `git_branch`, `git_origin_url`, `model`, `approval_mode`, `title`); covers threads whose rollout file was auto-cleaned | ordinary | **in progress** | — |
-| 4c | Codex hook receiver + installer that appends to `~/.codex/hooks.json` without clobbering Better Peacock + **liveness gate** for `codexStaleness.ts` | ordinary | queued | — |
+| 4c | Codex hook receiver + installer that appends to `~/.codex/hooks.json` without clobbering Better Peacock + **liveness gate** for `codexStaleness.ts` | ordinary | **in progress** | — |
+| 14 | Surface Codex hook liveness in the dashboard. `GET /api/attention` now returns `hooks.codex`, but `AttentionPanel.tsx` renders `null` when the list is empty — and the empty state is exactly where it matters ("quiet, hooks live" vs "quiet, we're guessing"). Surfaced by Loop 4c | ordinary | queued | — |
 | 5 | Tauri sidecar: bundle server as `externalBin`, spawn from `lib.rs` setup, probe-then-attach health check, `tauri-plugin-autostart`, remove launchd + `install-service`/`uninstall-service` | hard | queued | — |
 | 6 | Hook-event spooling + drain on startup (closes the D1 gap) | ordinary | queued | — |
 | 7 | lowdb → SQLite/WAL, event-sourced (derive status by query, delete the decay/orphan state machine); fresh DB per D3 | hard | queued | — |

@@ -1,8 +1,11 @@
 import fs from "node:fs";
-import { scanCodexProjects } from "../scan/codex.js";
+import type { AttentionItem } from "@shared/types.js";
+import { scanCodexProjects, type ScannedSessions } from "../scan/codex.js";
 import { attentionDb } from "../store/db.js";
 import { bus } from "../events/bus.js";
-import { notify } from "../alert/notifier.js";
+import { notify, type NotifyOptions } from "../alert/notifier.js";
+import { isHookLive } from "../alert/hookLiveness.js";
+import type { AttentionStoreLike } from "../alert/attention.js";
 
 const POLL_MS = 60_000;
 const STALE_AFTER_MS = 5 * 60_000; // quiet mid-session longer than this looks stuck
@@ -17,21 +20,54 @@ interface Tracked {
   lastGrowthAt: number;
 }
 
-// Codex has no hook system, so this is a heuristic staleness check, not a
-// true push signal — a rollout file that stops growing might mean Codex is
-// waiting on the user, or might just mean the session ended normally.
-//
-// Keyed by transcript path, not session id: a resumed session can produce
-// several rollout files that share one id, and tracking growth per file
-// keeps them from clobbering each other's size baseline.
-const tracked = new Map<string, Tracked>();
+/**
+ * Fallback for when Codex hooks are not delivering. This is a heuristic
+ * staleness check, not a true push signal — a rollout file that stops growing
+ * might mean Codex is waiting on the user, or might just mean the session
+ * ended normally.
+ *
+ * Codex *does* have a hook system, but its hooks only fire after a one-off
+ * interactive trust approval (~/.codex/hooks.state), so on a machine where that
+ * has never been granted no Codex hook ever fires. Hence: keep the heuristic,
+ * but stand down the moment real hook events start arriving (see the
+ * hooks-live gate in `runStalenessPass`), because hooks are authoritative and
+ * running both would only add false positives on top of the truth.
+ */
+export interface StalenessContext {
+  /**
+   * Growth tracking, keyed by transcript path rather than session id: a resumed
+   * session can produce several rollout files that share one id, and tracking
+   * growth per file keeps them from clobbering each other's size baseline.
+   * Lives on the context so each caller (and each test) gets its own.
+   */
+  tracked: Map<string, Tracked>;
+  scan: () => ScannedSessions;
+  store: AttentionStoreLike;
+  hooksLive: () => boolean;
+  notify: (opts: NotifyOptions) => Promise<void>;
+  emit: (items: AttentionItem[]) => void;
+  now: () => number;
+}
+
+export function createStalenessContext(overrides: Partial<StalenessContext> = {}): StalenessContext {
+  return {
+    tracked: new Map(),
+    scan: () => scanCodexProjects(),
+    store: attentionDb,
+    hooksLive: () => isHookLive("codex"),
+    notify,
+    emit: (items) => void bus.emit("attention:update", items),
+    now: () => Date.now(),
+    ...overrides,
+  };
+}
 
 /** Returns true if a new item was created. */
-function upsertAttention(sessionId: string, projectPath: string): boolean {
+function upsertAttention(ctx: StalenessContext, sessionId: string, projectPath: string): boolean {
   const id = `${sessionId}:codex-maybe`;
-  const items = attentionDb.data.items;
+  const items = ctx.store.data.items;
   if (items.some((i) => i.id === id)) return false;
-  const now = new Date().toISOString();
+  const now = new Date(ctx.now()).toISOString();
   items.push({
     id,
     sessionId,
@@ -47,29 +83,54 @@ function upsertAttention(sessionId: string, projectPath: string): boolean {
 }
 
 /** Demote a long-quiet flag instead of deleting it. Returns true if anything changed. */
-function decayAttention(sessionId: string): boolean {
-  const item = attentionDb.data.items.find(
+function decayAttention(ctx: StalenessContext, sessionId: string): boolean {
+  const item = ctx.store.data.items.find(
     (i) => i.sessionId === sessionId && i.type === "codex-maybe-waiting"
   );
   if (!item || item.priority === "none") return false;
   item.priority = "none";
   item.message = "Quiet for over an hour — the session probably ended, but check if you were expecting output.";
-  item.updatedAt = new Date().toISOString();
+  item.updatedAt = new Date(ctx.now()).toISOString();
   return true;
 }
 
 /** Returns true if any item was removed. */
-function clearAttention(sessionId: string): boolean {
-  const before = attentionDb.data.items.length;
-  attentionDb.data.items = attentionDb.data.items.filter(
+function clearAttention(ctx: StalenessContext, sessionId: string): boolean {
+  const before = ctx.store.data.items.length;
+  ctx.store.data.items = ctx.store.data.items.filter(
     (i) => !(i.sessionId === sessionId && i.type === "codex-maybe-waiting")
   );
-  return attentionDb.data.items.length !== before;
+  return ctx.store.data.items.length !== before;
 }
 
-async function pollOnce(): Promise<void> {
-  const sessions = scanCodexProjects();
-  const now = Date.now();
+/** Drop every heuristic flag, whatever session it belongs to. */
+function clearAllHeuristicFlags(ctx: StalenessContext): boolean {
+  const before = ctx.store.data.items.length;
+  ctx.store.data.items = ctx.store.data.items.filter((i) => i.type !== "codex-maybe-waiting");
+  return ctx.store.data.items.length !== before;
+}
+
+/** Returns true if the attention list changed. Exported for tests. */
+export async function runStalenessPass(ctx: StalenessContext): Promise<boolean> {
+  // Hooks are authoritative: a real PermissionRequest/Stop stream tells us
+  // exactly what the heuristic is guessing at, so guessing alongside it would
+  // only manufacture false positives. Retire any flag the heuristic left
+  // behind before hooks came online.
+  if (ctx.hooksLive()) {
+    const changed = clearAllHeuristicFlags(ctx);
+    // Forget the growth baselines too, so if hooks later go silent past the
+    // liveness window the heuristic restarts from each file's real mtime
+    // instead of reading the whole quiet period as "grew since last poll".
+    ctx.tracked.clear();
+    if (changed) {
+      await ctx.store.write();
+      ctx.emit(ctx.store.data.items);
+    }
+    return changed;
+  }
+
+  const sessions = ctx.scan();
+  const now = ctx.now();
   let changed = false;
   const seen = new Set<string>();
 
@@ -82,14 +143,14 @@ async function pollOnce(): Promise<void> {
         stat = fs.statSync(ref.transcriptPath);
       } catch {
         // Rollout file vanished — stop tracking it and drop any stale flag.
-        tracked.delete(ref.transcriptPath);
-        if (clearAttention(ref.sessionId)) changed = true;
+        ctx.tracked.delete(ref.transcriptPath);
+        if (clearAttention(ctx, ref.sessionId)) changed = true;
         continue;
       }
 
       const key = ref.transcriptPath;
       seen.add(key);
-      const prev = tracked.get(key);
+      const prev = ctx.tracked.get(key);
 
       if (!prev || prev.size !== stat.size) {
         // On first sight, anchor to the file's real mtime — not `now` — so a
@@ -97,38 +158,38 @@ async function pollOnce(): Promise<void> {
         // just went quiet at server start. Genuine growth since the last poll
         // means the session is active, so refresh to now and clear any flag.
         const lastGrowthAt = prev ? now : stat.mtimeMs;
-        tracked.set(key, { size: stat.size, lastGrowthAt });
+        ctx.tracked.set(key, { size: stat.size, lastGrowthAt });
         if (prev) {
-          if (clearAttention(ref.sessionId)) changed = true;
+          if (clearAttention(ctx, ref.sessionId)) changed = true;
           continue;
         }
         // fall through: evaluate staleness against the real mtime baseline
       }
 
-      const quietFor = now - tracked.get(key)!.lastGrowthAt;
+      const quietFor = now - ctx.tracked.get(key)!.lastGrowthAt;
       if (quietFor > STALE_AFTER_MS && quietFor < DECAY_AFTER_MS) {
-        if (upsertAttention(ref.sessionId, projectPath)) {
+        if (upsertAttention(ctx, ref.sessionId, projectPath)) {
           changed = true;
           // Panel-only flags were easy to miss — surface stuck Codex sessions
           // the same way Claude waiting events are surfaced.
-          notify({
+          ctx.notify({
             title: "Codex may be stuck",
             body: projectPath,
             sound: false,
           }).catch(() => {});
         }
       } else if (quietFor >= DECAY_AFTER_MS && quietFor < ABANDONED_AFTER_MS) {
-        if (decayAttention(ref.sessionId)) changed = true;
+        if (decayAttention(ctx, ref.sessionId)) changed = true;
       } else if (quietFor >= ABANDONED_AFTER_MS) {
-        if (clearAttention(ref.sessionId)) changed = true;
+        if (clearAttention(ctx, ref.sessionId)) changed = true;
       }
     }
   }
 
   // Evict tracker entries whose files no longer appear in the scan, so an
   // always-on service doesn't slowly accumulate dead paths.
-  for (const key of tracked.keys()) {
-    if (!seen.has(key)) tracked.delete(key);
+  for (const key of ctx.tracked.keys()) {
+    if (!seen.has(key)) ctx.tracked.delete(key);
   }
 
   // Drop flags whose session vanished from the scan entirely (rollout file
@@ -136,19 +197,21 @@ async function pollOnce(): Promise<void> {
   const liveSessionIds = new Set(
     Object.values(sessions).flatMap((refs) => refs.map((r) => r.sessionId))
   );
-  const beforeOrphans = attentionDb.data.items.length;
-  attentionDb.data.items = attentionDb.data.items.filter(
+  const beforeOrphans = ctx.store.data.items.length;
+  ctx.store.data.items = ctx.store.data.items.filter(
     (i) => i.type !== "codex-maybe-waiting" || liveSessionIds.has(i.sessionId)
   );
-  if (attentionDb.data.items.length !== beforeOrphans) changed = true;
+  if (ctx.store.data.items.length !== beforeOrphans) changed = true;
 
   if (changed) {
-    await attentionDb.write();
-    bus.emit("attention:update", attentionDb.data.items);
+    await ctx.store.write();
+    ctx.emit(ctx.store.data.items);
   }
+  return changed;
 }
 
 export function startCodexStalenessPoll(): void {
-  pollOnce();
-  setInterval(pollOnce, POLL_MS);
+  const ctx = createStalenessContext();
+  runStalenessPass(ctx);
+  setInterval(() => runStalenessPass(ctx), POLL_MS);
 }

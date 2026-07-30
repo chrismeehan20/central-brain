@@ -132,6 +132,19 @@ export interface AttentionItem {
   updatedAt: string;
 }
 
+/**
+ * Whether a tool's hook events are actually arriving. Codex hooks require a
+ * one-off interactive trust approval before they ever fire, so this is the
+ * difference between "quiet because nothing needs you" and "quiet because the
+ * push signal was never switched on".
+ */
+export interface HookLiveness {
+  tool: SourceTool;
+  live: boolean;
+  lastEventAt?: string; // ISO; absent = a hook event has never been received
+  windowMs: number; // how recent an event has to be to count as live
+}
+
 export interface HookEventPayload {
   session_id: string;
   transcript_path?: string;

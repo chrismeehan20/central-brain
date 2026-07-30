@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { JSONFilePreset } from "lowdb/node";
-import type { Override, AttentionItem, GithubStatus, ProjectSummary, ProjectDetail, DailyDigest } from "@shared/types.js";
+import type { Override, AttentionItem, GithubStatus, ProjectSummary, ProjectDetail, DailyDigest, SourceTool } from "@shared/types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.resolve(__dirname, "../../../data");
@@ -37,3 +37,17 @@ export interface DigestData {
 export const digestDb = await JSONFilePreset<DigestData>(path.join(dataDir, "digest.json"), {
   digest: null,
 });
+
+/**
+ * Last time a hook event was actually received from each tool. Codex's hooks
+ * only fire after a one-off interactive trust approval, so "have we ever heard
+ * from them, and how recently" is the only reliable way to know whether the
+ * push signal is real — see alert/hookLiveness.ts.
+ */
+export interface HookLivenessData {
+  lastEventAt: Partial<Record<SourceTool, string>>; // ISO timestamps; absent = never seen
+}
+export const hookLivenessDb = await JSONFilePreset<HookLivenessData>(
+  path.join(dataDir, "hook-liveness.json"),
+  { lastEventAt: {} },
+);
