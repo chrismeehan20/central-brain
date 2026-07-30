@@ -2,22 +2,16 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import type { DetailItem, DetailItemKind, Project, ProjectDetail } from "@shared/types.js";
 import { detailsDb } from "../store/db.js";
 import { AI_MODEL, canSpend, capMessage, isDebounced, recordCall } from "./budget.js";
+import { getAnthropic } from "./client.js";
 import { readDocBodies } from "./docBodies.js";
 import { getGithubStatus } from "../poll/githubPoller.js";
 import { bus } from "../events/bus.js";
 const KINDS: DetailItemKind[] = ["todo", "decision", "pending"];
 const MAX_OPEN_PER_KIND = 40; // guardrail against a runaway AI adding endless items
-
-let client: Anthropic | null | undefined;
-function getClient(): Anthropic | null {
-  if (client !== undefined) return client;
-  client = process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
-  return client;
-}
 
 function now(): string {
   return new Date().toISOString();
@@ -380,7 +374,7 @@ export async function getOrGenerateDetail(project: Project, force = false): Prom
   // Debounce rapid manual refreshes.
   if (force && isDebounced(detail.generatedAt)) return detail;
 
-  const anthropic = getClient();
+  const anthropic = getAnthropic();
   if (!anthropic) return detail; // no key — manual items still work, just no AI drafting
 
   if (!canSpend()) {

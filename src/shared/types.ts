@@ -66,6 +66,29 @@ export interface Override {
   displayName?: string;
   hidden?: boolean;
   pinned?: boolean;
+  /**
+   * Absolute path this project was moved to on disk. Sessions still recorded
+   * under the old path fold into the new one, so moving a repo doesn't split
+   * its history across two cards.
+   */
+  movedTo?: string;
+}
+
+export type RelocationConfidence = "high" | "medium" | "low";
+
+/** A folder on disk that might be where a missing project moved to. */
+export interface RelocationCandidate {
+  path: string;
+  score: number; // 0-1
+  confidence: RelocationConfidence;
+  reason: string; // human-readable, shown in the UI so the guess is auditable
+}
+
+/** One missing project plus its ranked relocation candidates (best first). */
+export interface MissingProjectTriage {
+  path: string;
+  displayName: string;
+  candidates: RelocationCandidate[];
 }
 
 export type DetailItemKind = "todo" | "decision" | "pending";
@@ -104,6 +127,7 @@ export interface Project {
   hidden: boolean;
   pinned: boolean;
   missing: boolean; // true = the folder no longer exists on disk (moved/deleted)
+  mergedFrom?: string[]; // old paths folded in via a relocation, if any
   lastActivity?: string;
   sessions: SessionRef[];
   markdown: MarkdownDoc[];
@@ -155,4 +179,26 @@ export interface HookEventPayload {
   tool_input?: unknown;
   last_assistant_message?: string;
   [key: string]: unknown;
+}
+
+/**
+ * Where the Anthropic API key comes from. `env` is `ANTHROPIC_API_KEY` (a `.env`
+ * under `npm run dev`); `settings` is a key entered in the dashboard and stored
+ * in the user-data dir — the only source a packaged app can use, since its
+ * sidecar runs with cwd `/` and never loads a `.env`.
+ */
+export type ApiKeySource = "env" | "settings" | "none";
+
+/** The key's state as sent to the client. Never carries the key itself, only a last-4 hint. */
+export interface ApiKeyStatus {
+  configured: boolean;
+  source: ApiKeySource;
+  hint: string | null;
+  managedByEnv: boolean;
+  setupDismissed: boolean;
+}
+
+export interface SettingsResponse {
+  apiKey: ApiKeyStatus;
+  ai: { model: string; dailyCap: number; callsRemaining: number };
 }

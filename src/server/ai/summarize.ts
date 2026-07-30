@@ -1,16 +1,10 @@
 import crypto from "node:crypto";
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import type { Project, ProjectSummary } from "@shared/types.js";
 import { summariesDb } from "../store/db.js";
 import { AI_MODEL, canSpend, capMessage, isDebounced, recordCall } from "./budget.js";
+import { getAnthropic } from "./client.js";
 import { readDocBodies } from "./docBodies.js";
-
-let client: Anthropic | null | undefined;
-function getClient(): Anthropic | null {
-  if (client !== undefined) return client;
-  client = process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
-  return client;
-}
 
 function buildContext(project: Project): string {
   const docs = project.markdown
@@ -63,7 +57,7 @@ export async function getOrGenerateSummary(project: Project, force = false): Pro
   if (force && isDebounced(cached?.generatedAt)) return cached;
   if (!canSpend()) return recordFailure(project.path, cached, capMessage());
 
-  const anthropic = getClient();
+  const anthropic = getAnthropic();
   if (!anthropic) return cached;
 
   try {

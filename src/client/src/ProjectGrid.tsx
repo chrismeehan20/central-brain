@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { Project } from "@shared/types";
+import { useState, type ReactNode } from "react";
+import type { MissingProjectTriage, Project } from "@shared/types";
 import ProjectCard from "./ProjectCard";
 
 interface Props {
@@ -7,11 +7,15 @@ interface Props {
   projects: Project[];
   emptyLabel?: string;
   collapsible?: boolean; // header toggles the grid; starts collapsed
+  headerAction?: ReactNode; // section-level control, e.g. bulk relocate
   onRename: (path: string, displayName: string) => void;
   onToggleHidden: (path: string, hidden: boolean) => void;
   onTogglePinned: (path: string, pinned: boolean) => void;
   onKeep?: (path: string) => void;
   onSummaryUpdated?: (path: string, summary: Project["summary"]) => void;
+  triage?: Record<string, MissingProjectTriage>; // keyed by project path
+  onRelocate?: (from: string, to: string) => Promise<void>;
+  onUndoMove?: (oldPaths: string[]) => Promise<void>;
 }
 
 export default function ProjectGrid({
@@ -19,11 +23,15 @@ export default function ProjectGrid({
   projects,
   emptyLabel,
   collapsible = false,
+  headerAction,
   onRename,
   onToggleHidden,
   onTogglePinned,
   onKeep,
   onSummaryUpdated,
+  triage,
+  onRelocate,
+  onUndoMove,
 }: Props) {
   const [collapsed, setCollapsed] = useState(collapsible);
   if (projects.length === 0 && !emptyLabel) return null;
@@ -36,13 +44,16 @@ export default function ProjectGrid({
 
   return (
     <section className="section">
-      {collapsible ? (
-        <button className="section__title section__title--toggle" onClick={() => setCollapsed((v) => !v)}>
-          <span className="section__caret">{collapsed ? "▸" : "▾"}</span> {heading}
-        </button>
-      ) : (
-        <h2 className="section__title">{heading}</h2>
-      )}
+      <div className="section__header">
+        {collapsible ? (
+          <button className="section__title section__title--toggle" onClick={() => setCollapsed((v) => !v)}>
+            <span className="section__caret">{collapsed ? "▸" : "▾"}</span> {heading}
+          </button>
+        ) : (
+          <h2 className="section__title">{heading}</h2>
+        )}
+        {headerAction}
+      </div>
       {collapsed ? null : projects.length === 0 ? (
         <p className="section__empty">{emptyLabel}</p>
       ) : (
@@ -56,6 +67,9 @@ export default function ProjectGrid({
               onTogglePinned={onTogglePinned}
               onKeep={onKeep}
               onSummaryUpdated={onSummaryUpdated}
+              triage={triage?.[p.path]}
+              onRelocate={onRelocate}
+              onUndoMove={onUndoMove}
             />
           ))}
         </div>

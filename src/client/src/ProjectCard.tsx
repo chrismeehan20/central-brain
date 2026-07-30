@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Project } from "@shared/types";
+import type { MissingProjectTriage, Project } from "@shared/types";
 import { relativeTime } from "./format";
 import { summarizeProject } from "./api";
 import { goToProject } from "./App";
@@ -11,6 +11,10 @@ interface Props {
   onTogglePinned: (path: string, pinned: boolean) => void;
   onKeep?: (path: string) => void;
   onSummaryUpdated?: (path: string, summary: Project["summary"]) => void;
+  /** Present only for missing projects, once the search for a new home has run. */
+  triage?: MissingProjectTriage;
+  onRelocate?: (from: string, to: string) => Promise<void>;
+  onUndoMove?: (oldPaths: string[]) => Promise<void>;
 }
 
 function toolCounts(project: Project) {
@@ -26,13 +30,36 @@ export default function ProjectCard({
   onTogglePinned,
   onKeep,
   onSummaryUpdated,
+  triage,
+  onRelocate,
+  onUndoMove,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState(project.displayName);
   const [summarizing, setSummarizing] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [showAllDocs, setShowAllDocs] = useState(false);
+  const [chosenTarget, setChosenTarget] = useState<string | null>(null);
+  const [relocating, setRelocating] = useState(false);
+  const [relocateError, setRelocateError] = useState<string | null>(null);
   const counts = toolCounts(project);
+
+  const candidates = triage?.candidates ?? [];
+  const target = chosenTarget ?? candidates[0]?.path ?? null;
+  const chosen = candidates.find((c) => c.path === target);
+
+  async function runRelocate() {
+    if (!target || !onRelocate) return;
+    setRelocating(true);
+    setRelocateError(null);
+    try {
+      await onRelocate(project.path, target);
+    } catch (err) {
+      setRelocateError(String((err as Error).message ?? err));
+    } finally {
+      setRelocating(false);
+    }
+  }
 
   const MAX_DOC_CHIPS = 4;
   const docs = showAllDocs ? project.markdown : project.markdown.slice(0, MAX_DOC_CHIPS);
@@ -110,6 +137,69 @@ export default function ProjectCard({
           </span>
         )}
       </div>
+
+      {project.missing && onRelocate && (
+        <div className="relocate">
+          {!triage ? (
+            <p className="relocate__status">Looking for where this folder went…</p>
+          ) : candidates.length === 0 ? (
+            <p className="relocate__status">
+              No folder with this name found in your code directories. It was probably deleted —
+              Hide it to clear it out.
+            </p>
+          ) : (
+            <>
+              <div className="relocate__header">
+                <span>Looks like it moved to</span>
+                {chosen && (
+                  <span
+                    className={`badge badge--confidence-${chosen.confidence}`}
+                    title={`${chosen.confidence} confidence — ${chosen.reason}`}
+                  >
+                    {chosen.confidence}
+                  </span>
+                )}
+              </div>
+              {candidates.length === 1 ? (
+                <div className="relocate__path" title={candidates[0].path}>
+                  {candidates[0].path}
+                </div>
+              ) : (
+                <select
+                  className="relocate__select"
+                  value={target ?? ""}
+                  onChange={(e) => setChosenTarget(e.target.value)}
+                >
+                  {candidates.map((c) => (
+                    <option key={c.path} value={c.path}>
+                      {c.path}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <div className="relocate__actions">
+                <button className="relocate__confirm" onClick={runRelocate} disabled={relocating}>
+                  {relocating ? "Relocating…" : "Relocate here"}
+                </button>
+                {chosen && <span className="relocate__reason">{chosen.reason}</span>}
+              </div>
+              {relocateError && <span className="card__summary-error">{relocateError}</span>}
+            </>
+          )}
+        </div>
+      )}
+
+      {project.mergedFrom && project.mergedFrom.length > 0 && onUndoMove && (
+        <div className="relocate relocate--merged">
+          <span title={project.mergedFrom.join("\n")}>
+            History merged from {project.mergedFrom.length} old path
+            {project.mergedFrom.length === 1 ? "" : "s"}
+          </span>
+          <button className="relocate__undo" onClick={() => onUndoMove(project.mergedFrom ?? [])}>
+            Undo move
+          </button>
+        </div>
+      )}
 
       {project.markdown.length > 0 && (
         <div className="card__docs">

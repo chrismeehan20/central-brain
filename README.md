@@ -101,8 +101,30 @@ path inside a checkout.
 
 ### Optional: AI summaries
 
-Copy `.env.example` to `.env` and set `ANTHROPIC_API_KEY` to enable the
-one-line "what's left" summaries. Everything else works without it.
+The one-line "what's left" summaries and the daily digest need an Anthropic API
+key ([console.anthropic.com](https://console.anthropic.com/settings/keys)).
+Everything else — projects, alerting, GitHub status — works without one.
+
+Two ways to provide it:
+
+1. **In the app.** First launch shows a "Turn on AI summaries" card; paste the
+   key there, or reach the same panel any time from the ⚙ button in the header.
+   The key is verified against the API before it's saved (a free `models.list`
+   call, so it costs nothing and doesn't touch the daily cap), then stored
+   owner-only (`0600`) in `settings.json` inside the platform user-data dir —
+   `~/Library/Application Support/central-brain/` on macOS. It survives app
+   updates, is never sent back to the browser, and never enters the repo or the
+   `.app` bundle.
+2. **Via the environment.** Copy `.env.example` to `.env` and set
+   `ANTHROPIC_API_KEY`. Convenient for `npm run dev`.
+
+`ANTHROPIC_API_KEY` wins when both are present, and the settings panel says so
+rather than pretending to accept a value it would ignore. Note that a packaged
+`.app` never sees a `.env` at all: the sidecar is spawned with cwd `/`, so
+`dotenv` finds nothing — which is exactly why option 1 exists.
+
+To stop using AI, click **Remove key** (or **Skip for now** on first run —
+the dashboard is fully usable without it).
 
 ## Development
 
