@@ -116,6 +116,67 @@ is kept. The sidechain-filtering concern is **dropped** — `isSidechain:true`
 appears in 0 of 60 sampled transcripts, so there is no evidence the raw path
 needs it, and adding a filter for a field that never appears is speculative.
 
+### D6 — Codex hooks do not fire; the heuristic stays
+
+The original plan (and the advice that opened this queue) was "wire Codex hooks,
+delete the 154-line `codexStaleness.ts` heuristic." **Following that would have
+removed Central Brain's only Codex signal and replaced it with nothing.**
+
+Codex hooks are real and the feature is on — `codex features list` reports
+`hooks  stable  true`, and `~/.codex/hooks.json` already exists (installed by
+Better Peacock). But hooks additionally require **persisted trust**: the binary
+carries `hooks.state`, `trusted_hash`, `failed to write hook trust in TUI`, and a
+`--dangerously-bypass-hook-trust` escape hatch. `~/.codex/hooks.state` **does not
+exist on this machine**, so trust has never been granted.
+
+Proof rather than inference: Better Peacock's hook handler writes a state record
+to `$TMPDIR/better-peacock-agent-beacon/` every time a hook fires. That directory
+contains **6 records, all `provider=claude`, and 0 `provider=codex`** — across 12
+days during which Codex was used heavily (328 threads). Codex hooks have never
+fired here.
+
+Consequences, all now reflected in the queue:
+
+- `codexStaleness.ts` is **kept**, not deleted, and Loop 4c gates it on *observed
+  hook liveness* — the heuristic stands down automatically once real Codex hook
+  events arrive, and stays active until then.
+- Trust is keyed to a hash of the hook config, so appending Central Brain's hooks
+  **invalidates existing trust** and requires re-approval. The Loop 4c installer
+  must say so plainly rather than appearing to succeed.
+- The hook payload shape is already known without any Codex run: Better Peacock
+  consumes it with `hook_event_name`, `session_id`, `cwd`, `message` — the exact
+  field names `alert/attention.ts` already parses for Claude, from a single script
+  shared across both providers. So Loop 4c's receiver is cheap.
+
+### Correction: what was actually wrong with Codex scanning
+
+The interesting defect was not hooks at all. `scanCodexProjects()` returned
+**1 project / 4 sessions** while Codex's own DB held **328 threads across 37
+distinct `cwd`s**, with 327 of 328 rollout files still present on disk.
+
+`readSessionMeta()` read a fixed **8192-byte** buffer, took `split("\n")[0]`, and
+`JSON.parse`d it. Codex's `session_meta` first line embeds the full
+`base_instructions` text and has grown well past that:
+
+| First-line size across 327 real rollout files | |
+|---|---|
+| min | 3,272 B |
+| **p50** | **15,342 B** |
+| p90 | 22,068 B |
+| max | 42,389 B |
+| **longer than the 8 KiB buffer** | **323 of 327** |
+
+So `JSON.parse` threw `Unterminated string`, the bare `catch` swallowed it,
+`readSessionMeta` returned null, and `if (!meta?.cwd) continue` dropped the
+session. The 4 survivors were simply the files under 8 KB. Fixed in Loop 4a:
+**1 → 37 projects, 4 → 327 sessions.**
+
+Checked before landing: `codexStaleness.ts` shares this scanner, so recovering
+323 sessions could in principle have caused a desktop-notification storm. It does
+not — only its 5-minute-to-1-hour window notifies, and exactly **1** of the 327
+sessions falls in it; the other 326 are older than 24 h and take the silent
+clear path.
+
 ### Newly available upstream capability (unused)
 
 - `~/.codex/state_5.sqlite` `threads` table: `cwd`, `title`,
@@ -211,7 +272,9 @@ ask before risky calls.
 | 1 | CI gate: workflow (typecheck + build), `dependabot.yml` with `update-types: [minor, patch]`, gitignore `.vscode/` | simple | **merged** | [#1](https://github.com/chrismeehan20/central-brain/pull/1) |
 | 2 | Test harness: `node:test` via `tsx` (no new deps), `npm test` in CI, first tests for `paths.ts` + `markdown.ts` | simple | **merged** | [#10](https://github.com/chrismeehan20/central-brain/pull/10) |
 | 3 | Claude scanner: **bounded reads** (625 MB / ~1,170 ms blocking per scan today), plus sibling-`cwd` fallback. **Keeps** the `sessions-index.json` path — see the correction above | ordinary | **in progress** | — |
-| 4 | Wire Codex hooks (append to `~/.codex/hooks.json`, must not clobber Better Peacock); read `state_5.sqlite` `threads`; **delete `codexStaleness.ts`** | ordinary | queued | — |
+| 4a | **Fix the `session_meta` truncated read** — 8 KiB buffer vs p50 15 KB first lines was silently dropping 323 of 327 Codex sessions | ordinary | **in progress** | — |
+| 4b | Enrich Codex sessions from `state_*.sqlite` `threads` (`tokens_used`, `git_branch`, `git_origin_url`, `model`, `approval_mode`, `title`); covers threads whose rollout file was auto-cleaned | ordinary | queued | — |
+| 4c | Codex hook receiver + installer that appends to `~/.codex/hooks.json` without clobbering Better Peacock + **liveness gate** for `codexStaleness.ts` | ordinary | queued | — |
 | 5 | Tauri sidecar: bundle server as `externalBin`, spawn from `lib.rs` setup, probe-then-attach health check, `tauri-plugin-autostart`, remove launchd + `install-service`/`uninstall-service` | hard | queued | — |
 | 6 | Hook-event spooling + drain on startup (closes the D1 gap) | ordinary | queued | — |
 | 7 | lowdb → SQLite/WAL, event-sourced (derive status by query, delete the decay/orphan state machine); fresh DB per D3 | hard | queued | — |
