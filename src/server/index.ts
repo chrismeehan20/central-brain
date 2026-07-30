@@ -2,6 +2,7 @@ import "dotenv/config";
 import Fastify from "fastify";
 import fastifyStatic from "@fastify/static";
 import { resolveClientDir } from "./appPaths.js";
+import { watchParent } from "./parentWatch.js";
 import { dataDir } from "./store/db.js";
 import { runScan } from "./scan/index.js";
 import { projectsRoutes } from "./routes/projects.js";
@@ -40,6 +41,10 @@ app.setNotFoundHandler((req, reply) => {
   reply.sendFile("index.html");
 });
 
+// Die with our parent when spawned as the Tauri sidecar, so a killed app
+// cannot leave an orphan holding this port.
+const watchingParent = watchParent();
+
 app
   .listen({ port: PORT, host: "127.0.0.1" })
   .then(() => {
@@ -47,6 +52,7 @@ app
     // The only diagnostic anyone gets when a packaged app resolves these wrong.
     app.log.info(`central-brain data dir: ${dataDir}`);
     app.log.info(`central-brain client dir: ${clientDist}`);
+    app.log.info(`central-brain parent watchdog: ${watchingParent ? "armed" : "off"}`);
     runScan();
     setInterval(runScan, SCAN_INTERVAL_MS);
     startWatcher();
