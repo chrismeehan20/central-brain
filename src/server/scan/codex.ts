@@ -1,12 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { StringDecoder } from "node:string_decoder";
 import type { SessionRef } from "@shared/types.js";
 import { canonicalize } from "./paths.js";
-
-const CODEX_SESSIONS_DIR = path.join(os.homedir(), ".codex", "sessions");
-const SESSION_INDEX_FILE = path.join(os.homedir(), ".codex", "session_index.jsonl");
+import { codexHomeDir, readCodexThreads, type CodexThread } from "./codexDb.js";
 
 /**
  * The `session_meta` first line of a rollout file is not small: it embeds
@@ -145,20 +142,42 @@ function readThreadNames(sessionIndexFile: string): Map<string, string> {
 export type ScannedSessions = Record<string, SessionRef[]>;
 
 /**
+ * Copies the DB-only metadata onto a session. Existing values always win:
+ * `summary` stays the session_index.jsonl thread name (which covers 324 of 328
+ * sessions, so the DB `title` is only a last resort) and `gitBranch` stays
+ * whatever the rollout file said.
+ */
+function applyThread(ref: SessionRef, thread: CodexThread): void {
+  ref.summary ??= thread.title;
+  ref.gitBranch ??= thread.gitBranch;
+  ref.tokensUsed ??= thread.tokensUsed;
+  ref.model ??= thread.model;
+  ref.approvalMode ??= thread.approvalMode;
+  ref.gitOriginUrl ??= thread.gitOriginUrl;
+}
+
+/**
  * Scans ~/.codex/sessions for both the CLI and VS Code extension (shared
  * store, confirmed via `source`/`originator` fields). Codex has no
  * sessions-index-style cwd shortcut, so every rollout file's first line
  * (session_meta) is read once and cached by birthtime.
  *
- * `sessionsDir` and `sessionIndexFile` are injectable so tests can point the
- * scan at a fixture tree.
+ * Codex's own state DB under `codexHome` then supplies fields the rollout files
+ * do not have (tokens, model, approval mode, git origin) and recovers sessions
+ * whose rollout file has since been auto-deleted. Enrichment is strictly
+ * additive: if the DB is missing, locked, or schema-drifted, the result is
+ * exactly what the rollout files alone produce.
+ *
+ * `sessionsDir`, `sessionIndexFile` and `codexHome` are injectable so tests can
+ * point the scan at a fixture tree and never touch a real ~/.codex.
  */
 export function scanCodexProjects(
-  sessionsDir: string = CODEX_SESSIONS_DIR,
-  sessionIndexFile: string = SESSION_INDEX_FILE,
+  sessionsDir: string = path.join(codexHomeDir(), "sessions"),
+  sessionIndexFile: string = path.join(codexHomeDir(), "session_index.jsonl"),
+  codexHome: string = codexHomeDir(),
 ): ScannedSessions {
   const result: ScannedSessions = {};
-  if (!fs.existsSync(sessionsDir)) return result;
+  const fileRefs: SessionRef[] = [];
 
   const threadNames = readThreadNames(sessionIndexFile);
   const files = walkRolloutFiles(sessionsDir);
@@ -192,6 +211,39 @@ export function scanCodexProjects(
       transcriptPath: file,
     };
     (result[key] ??= []).push(ref);
+    fileRefs.push(ref);
+  }
+
+  const threads = readCodexThreads(codexHome);
+  if (threads.size === 0) return result;
+
+  for (const ref of fileRefs) {
+    const thread = threads.get(ref.sessionId);
+    if (thread) applyThread(ref, thread);
+  }
+
+  // Codex's auto-cleanup deletes rollout files but leaves the `threads` row, so
+  // that row is then the only surviving record of the session. Recover those,
+  // and only those: if the rollout file is still on disk the file scan owns the
+  // session (and if it dropped it, it did so for a reason).
+  const seen = new Set(fileRefs.map((ref) => ref.sessionId));
+  for (const thread of threads.values()) {
+    if (seen.has(thread.id)) continue;
+    if (thread.rolloutPath && fs.existsSync(thread.rolloutPath)) continue;
+    if (!thread.lastActivity) continue; // no usable timestamp: nothing to sort or show
+
+    const ref: SessionRef = {
+      tool: "codex",
+      sessionId: thread.id,
+      lastActivity: thread.lastActivity,
+      summary: threadNames.get(thread.id) ?? thread.title,
+      entrypoint: thread.entrypoint,
+      // Deliberately unset: the transcript is gone, and consumers treat
+      // transcriptPath as a readable file.
+      transcriptPath: undefined,
+    };
+    applyThread(ref, thread);
+    (result[canonicalize(thread.cwd)] ??= []).push(ref);
   }
 
   return result;

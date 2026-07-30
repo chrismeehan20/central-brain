@@ -8,7 +8,13 @@ export interface SessionRef {
   summary?: string;
   gitBranch?: string;
   entrypoint?: string; // e.g. "claude-vscode", "cli"
-  transcriptPath?: string;
+  transcriptPath?: string; // absent when the transcript file no longer exists
+  // Codex only, from its own state DB (~/.codex/state_<n>.sqlite) — the rollout
+  // files do not carry these.
+  tokensUsed?: number;
+  model?: string;
+  approvalMode?: string;
+  gitOriginUrl?: string;
 }
 
 export interface MarkdownDoc {
