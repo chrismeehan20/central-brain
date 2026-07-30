@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { JSONFilePreset } from "lowdb/node";
+import { resolveDataDir } from "../appPaths.js";
 import type { Override, AttentionItem, GithubStatus, ProjectSummary, ProjectDetail, DailyDigest, SourceTool } from "@shared/types.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.resolve(__dirname, "../../../data");
+/** Exported so startup can log it — inside an app bundle this is the only clue to where the data went. */
+export const dataDir = resolveDataDir();
 fs.mkdirSync(dataDir, { recursive: true });
 
 export type OverridesData = Record<string, Override>;

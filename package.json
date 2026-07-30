@@ -21,7 +21,7 @@
     "menubar": "tauri dev",
     "menubar:build": "npm run build && tauri build",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.bin.json",
-    "test": "node --import tsx --test \"src/**/*.test.ts\""
+    "test": "CENTRAL_BRAIN_DATA_DIR=\"${TMPDIR:-/tmp}/central-brain-test-data\" node --import tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
