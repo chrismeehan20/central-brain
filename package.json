@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "concurrently -n server,client -c blue,green \"tsx watch src/server/index.ts\" \"vite\"",
-    "build": "vite build && tsc -p tsconfig.build.json",
+    "build": "vite build && tsc -p tsconfig.build.json && npm run build:bundle",
     "start": "node dist/server/index.js",
     "install-hooks": "tsx bin/install-hooks.ts",
     "uninstall-hooks": "tsx bin/uninstall-hooks.ts",
@@ -21,7 +21,8 @@
     "menubar": "tauri dev",
     "menubar:build": "npm run build && tauri build",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.bin.json",
-    "test": "CENTRAL_BRAIN_DATA_DIR=\"${TMPDIR:-/tmp}/central-brain-test-data\" node --import tsx --test \"src/**/*.test.ts\""
+    "test": "CENTRAL_BRAIN_DATA_DIR=\"${TMPDIR:-/tmp}/central-brain-test-data\" node --import tsx --test \"src/**/*.test.ts\"",
+    "build:bundle": "esbuild src/server/index.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/server-bundle.mjs --packages=bundle --banner:js='import{createRequire as __cbCreateRequire}from\"node:module\";const require=__cbCreateRequire(import.meta.url);'"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -41,6 +42,7 @@
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^10.0.4",
+    "esbuild": "^0.28.1",
     "tsx": "^4.23.1",
     "typescript": "^5.7.3",
     "vite": "^6.0.7"
