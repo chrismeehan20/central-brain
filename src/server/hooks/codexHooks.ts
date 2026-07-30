@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { fileURLToPath } from "node:url";
+import { resolveNotifyScript } from "../appPaths.js";
 
 /**
  * Install/uninstall logic for Codex's ~/.codex/hooks.json, factored out of the
@@ -16,8 +16,6 @@ import { fileURLToPath } from "node:url";
  * of this whole file. Rewriting or reordering someone else's handler would be
  * both a data loss and a silent revocation of their trust approval.
  */
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Codex fires these with the same field names Claude uses. SessionStart /
@@ -67,9 +65,9 @@ export function codexHooksPath(env: NodeJS.ProcessEnv = process.env, home: strin
   return path.join(codexHome && codexHome.length > 0 ? codexHome : path.join(home, ".codex"), "hooks.json");
 }
 
-/** Absolute path to hooks/notify-codex.sh, from either src/ or dist/ (same depth). */
+/** Absolute path to hooks/notify-codex.sh — resolved by appPaths so a bundled server can be told where it is. */
 export function codexNotifyScriptPath(): string {
-  return path.resolve(__dirname, "../../../hooks/notify-codex.sh");
+  return resolveNotifyScript({ name: "notify-codex.sh" });
 }
 
 export function buildCodexHookCommand(notifyScript: string = codexNotifyScriptPath()): string {
