@@ -277,7 +277,18 @@ ask before risky calls.
 | 4c | Codex hook receiver + installer that appends to `~/.codex/hooks.json` without clobbering Better Peacock + **liveness gate** for `codexStaleness.ts` | ordinary | **in progress** | — |
 | 14 | Surface Codex hook liveness in the dashboard. `GET /api/attention` now returns `hooks.codex`, but `AttentionPanel.tsx` renders `null` when the list is empty — and the empty state is exactly where it matters ("quiet, hooks live" vs "quiet, we're guessing"). Surfaced by Loop 4c | ordinary | queued | — |
 | 5a | **App path resolution** — `data/`, client dist and `hooks/` resolved explicitly and env-overridably instead of by `__dirname` arithmetic at three different depths. Prerequisite: bundling collapses all three | ordinary | **in progress** | — |
-| 5b | Tauri sidecar: esbuild single-file server bundle, spawn from `lib.rs` setup, probe-then-attach health check, `tauri-plugin-autostart`, remove launchd + `install-service`/`uninstall-service` | hard | queued | — |
+| 5b | **esbuild single-file server bundle** + a boot smoke test | ordinary | **in progress** | — |
+| 5c | Tauri sidecar: spawn the bundle from `lib.rs` setup, probe-then-attach health check, `tauri-plugin-autostart`, remove launchd + `install-service`/`uninstall-service` | hard | queued | — |
+
+**Loop 5c must handle the macOS GUI PATH problem.** A `.app` launched from Finder
+or at login does **not** inherit a shell `PATH` — it gets roughly
+`/usr/bin:/bin:/usr/sbin:/sbin`. `node` lives at `/usr/local/bin/node` on this
+machine, so spawning `node` by bare name will fail *only* in the packaged app and
+work fine in `tauri dev`. Resolve an absolute interpreter path (probe
+`/usr/local/bin/node`, `/opt/homebrew/bin/node`, `$NVM_DIR`…), and surface a real
+error in the tray when none is found rather than showing a blank popover. This is
+the same class of failure as the original stale-plist bug: invisible, and only in
+the packaged path.
 | 15 | Make `store/db.ts` initialise lazily / take an injected dir. It runs `mkdirSync` and creates lowdb files **at import time**, so three test files that transitively import it would write to the real user-data dir. Loop 5a bridged this by setting `CENTRAL_BRAIN_DATA_DIR` in the `test` script, which is a POSIX-only env prefix and does not protect a raw `node --test` run. Loop 7 likely subsumes this | ordinary | queued | — |
 | 6 | Hook-event spooling + drain on startup (closes the D1 gap) | ordinary | queued | — |
 | 7 | lowdb → SQLite/WAL, event-sourced (derive status by query, delete the decay/orphan state machine); fresh DB per D3 | hard | queued | — |
