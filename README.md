@@ -43,10 +43,16 @@ npm install
 npm run build
 npm run install-hooks        # wires Claude Code hook events into ~/.claude/settings.json
 npm run install-codex-hooks  # wires Codex hook events into $CODEX_HOME/hooks.json
-npm run install-service      # runs it always-on via launchd (macOS)
+npm run menubar:build        # builds the menubar app that runs the server
 ```
 
-Open **http://localhost:4317**.
+Then move `src-tauri/target/release/bundle/macos/Central Brain.app` to
+`/Applications` and launch it. The app runs the server itself — there is no
+separate service to install and nothing to start by hand.
+
+The dashboard is at **http://localhost:4317** (also the tray menu's "Open in
+browser"), but you don't need a browser: clicking the tray icon opens it as a
+popover.
 
 `install-hooks` backs up your existing `~/.claude/settings.json` first and
 only *appends* new hook entries — it never touches hooks you already have
@@ -64,8 +70,34 @@ does not say so. `~/.codex/hooks.state` appearing is how you know it worked.
 Until then the staleness heuristic keeps covering for it. To remove them:
 `npm run uninstall-codex-hooks`.
 
-`install-service` registers a `launchd` agent so the dashboard survives
-reboots and restarts on crash. To remove it: `npm run uninstall-service`.
+### How the app runs the server
+
+The menubar app owns the server's lifetime. On launch it probes port 4317: if
+something is already listening (say `npm run dev`) it **attaches** rather than
+starting a second copy; otherwise it spawns `dist/server-bundle.mjs` — a single
+self-contained file built by `npm run build` — as a child process.
+
+Three details exist because of specific failures:
+
+- **The interpreter is resolved by absolute path**, not from `PATH`. A `.app`
+  launched from Finder or at login gets roughly `/usr/bin:/bin:/usr/sbin:/sbin`,
+  so spawning bare `node` works under `tauri dev` and fails *only* in the
+  packaged app.
+- **The child gets a stdin pipe it never reads.** When the app dies for any
+  reason — quit, SIGTERM, SIGKILL, crash — the OS closes the write end, the
+  server sees EOF and exits. Without this, killing the app left the server
+  orphaned and still holding the port, which the next launch would then attach
+  to, silently talking to a stale build.
+- **A dead server shows up in the tray**, in the tooltip and a status menu item,
+  instead of the popover rendering blank. A status dashboard that can't report
+  its own status was the original complaint.
+
+There is no `launchd` service any more. The previous one baked an absolute path
+into a plist at install time, so moving the repo broke it permanently and
+silently — it had been crash-looping with `MODULE_NOT_FOUND` for weeks while the
+app showed an empty popover. Start-at-login is handled by the app itself via
+`tauri-plugin-autostart`, which points at the installed `.app` rather than a
+path inside a checkout.
 
 ### Optional: AI summaries
 

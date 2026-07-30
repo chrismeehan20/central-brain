@@ -15,8 +15,6 @@
     "uninstall-hooks": "tsx bin/uninstall-hooks.ts",
     "install-codex-hooks": "tsx bin/install-codex-hooks.ts",
     "uninstall-codex-hooks": "tsx bin/uninstall-codex-hooks.ts",
-    "install-service": "tsx bin/install-service.ts",
-    "uninstall-service": "tsx bin/uninstall-service.ts",
     "tauri": "tauri",
     "menubar": "tauri dev",
     "menubar:build": "npm run build && tauri build",

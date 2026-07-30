@@ -1,14 +1,16 @@
+mod sidecar;
+
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, WindowEvent,
+    Manager, RunEvent, WindowEvent,
 };
 use tauri_plugin_positioner::{Position, WindowExt};
 
-const DASHBOARD_URL: &str = "http://localhost:4317";
+use sidecar::{Sidecar, SERVER_PORT};
 
 /// Records when the popover was last dismissed by losing focus. A click on the
 /// tray icon while the popover is open blurs (and hides) it *before* the tray
@@ -16,10 +18,18 @@ const DASHBOARD_URL: &str = "http://localhost:4317";
 /// it, so a click meant to close it would feel like nothing happened.
 struct BlurGuard(Mutex<Instant>);
 
+fn dashboard_url() -> String {
+    format!("http://localhost:{SERVER_PORT}")
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_positioner::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(BlurGuard(Mutex::new(Instant::now() - Duration::from_secs(1))))
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -34,19 +44,39 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
+            // The app owns the server's lifetime now — no launchd job, no
+            // `npm run dev` required, and no absolute path to go stale when the
+            // repo moves. That staleness is what killed the previous setup.
+            let state = sidecar::start(app.handle());
+            app.manage(Sidecar(Mutex::new(state)));
+            let sidecar = app.state::<Sidecar>();
+
+            let status_i =
+                MenuItem::with_id(app, "status", sidecar.status_line(), false, None::<&str>)?;
             let open_i = MenuItem::with_id(app, "open", "Open in browser", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit Central Brain", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&open_i, &quit_i])?;
+            let menu = Menu::with_items(app, &[&status_i, &open_i, &quit_i])?;
+
+            // Surface an unhealthy server in the tooltip. Previously a dead
+            // server just produced a blank popover with no explanation — a
+            // status dashboard that could not report its own status.
+            let tooltip = if sidecar.is_healthy() {
+                "Central Brain".to_string()
+            } else {
+                format!("Central Brain — {}", sidecar.status_line())
+            };
 
             TrayIconBuilder::with_id("central-brain-tray")
                 .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("Central Brain")
+                .tooltip(tooltip)
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => app.exit(0),
                     "open" => {
-                        let _ = std::process::Command::new("open").arg(DASHBOARD_URL).spawn();
+                        let _ = std::process::Command::new("open")
+                            .arg(dashboard_url())
+                            .spawn();
                     }
                     _ => {}
                 })
@@ -66,6 +96,22 @@ pub fn run() {
                             .map(|g| g.0.lock().unwrap().elapsed() < Duration::from_millis(250))
                             .unwrap_or(false);
                         if just_dismissed {
+                            return;
+                        }
+
+                        // Don't open a popover onto a dead port — it renders
+                        // blank and looks like the app itself is broken. Put the
+                        // real reason in the tooltip instead.
+                        if !sidecar::server_is_up() {
+                            let reason = app
+                                .try_state::<Sidecar>()
+                                .map(|s| s.status_line())
+                                .unwrap_or_else(|| "server not running".to_string());
+                            if let Some(tray) = app.tray_by_id("central-brain-tray") {
+                                let _ =
+                                    tray.set_tooltip(Some(format!("Central Brain — {reason}")));
+                            }
+                            log::warn!("tray click ignored: {reason}");
                             return;
                         }
 
@@ -95,6 +141,17 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|handle, event| {
+        // One process tree: the server dies with the app rather than outliving it
+        // as an orphan holding port 4317. Only a server we spawned is killed — an
+        // attached one (someone's `npm run dev`) is left running.
+        if let RunEvent::Exit = event {
+            if let Some(sidecar) = handle.try_state::<Sidecar>() {
+                sidecar.shutdown();
+            }
+        }
+    });
 }

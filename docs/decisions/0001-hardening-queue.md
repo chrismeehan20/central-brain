@@ -278,7 +278,7 @@ ask before risky calls.
 | 14 | Surface Codex hook liveness in the dashboard. `GET /api/attention` now returns `hooks.codex`, but `AttentionPanel.tsx` renders `null` when the list is empty — and the empty state is exactly where it matters ("quiet, hooks live" vs "quiet, we're guessing"). Surfaced by Loop 4c | ordinary | queued | — |
 | 5a | **App path resolution** — `data/`, client dist and `hooks/` resolved explicitly and env-overridably instead of by `__dirname` arithmetic at three different depths. Prerequisite: bundling collapses all three | ordinary | **in progress** | — |
 | 5b | **esbuild single-file server bundle** + a boot smoke test | ordinary | **in progress** | — |
-| 5c | Tauri sidecar: spawn the bundle from `lib.rs` setup, probe-then-attach health check, `tauri-plugin-autostart`, remove launchd + `install-service`/`uninstall-service` | hard | queued | — |
+| 5c | Tauri sidecar: spawn the bundle from `lib.rs` setup, probe-then-attach health check, `tauri-plugin-autostart`, remove launchd + `install-service`/`uninstall-service` | hard | **in progress** | — |
 
 **Loop 5c must handle the macOS GUI PATH problem.** A `.app` launched from Finder
 or at login does **not** inherit a shell `PATH` — it gets roughly
