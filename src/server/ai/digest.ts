@@ -1,19 +1,13 @@
 import crypto from "node:crypto";
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import type { DailyDigest } from "@shared/types.js";
 import { digestDb } from "../store/db.js";
 import { getCachedProjects } from "../scan/index.js";
 import { getGithubStatus } from "../poll/githubPoller.js";
 import { AI_MODEL, canSpend, capMessage, isDebounced, recordCall, today } from "./budget.js";
+import { getAnthropic } from "./client.js";
 
 const WINDOW_MS = 24 * 60 * 60_000;
-
-let client: Anthropic | null | undefined;
-function getClient(): Anthropic | null {
-  if (client !== undefined) return client;
-  client = process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
-  return client;
-}
 
 /** Last-24h activity, a few lines per project — the digest's evidence and its hash input. */
 function buildContext(): string {
@@ -68,7 +62,7 @@ export async function getOrGenerateDigest(force = false): Promise<DailyDigest | 
   };
   if (!canSpend()) return persist({ ...fallback, lastError: capMessage() });
 
-  const anthropic = getClient();
+  const anthropic = getAnthropic();
   if (!anthropic) return cached;
 
   try {

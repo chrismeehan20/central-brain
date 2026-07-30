@@ -8,6 +8,7 @@ import { runScan } from "./scan/index.js";
 import { projectsRoutes } from "./routes/projects.js";
 import { detailsRoutes } from "./routes/details.js";
 import { hookRoutes } from "./routes/hook.js";
+import { settingsRoutes } from "./routes/settings.js";
 import { streamRoutes } from "./routes/stream.js";
 import { startWatcher } from "./watch/watcher.js";
 import { startCodexStalenessPoll } from "./poll/codexStaleness.js";
@@ -24,6 +25,7 @@ app.get("/api/health", async () => ({ ok: true, time: new Date().toISOString() }
 await app.register(projectsRoutes);
 await app.register(detailsRoutes);
 await app.register(hookRoutes);
+await app.register(settingsRoutes);
 await app.register(streamRoutes);
 
 // Registered in every mode: dev serves the same built client, and the Tauri

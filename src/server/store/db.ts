@@ -51,3 +51,49 @@ export const hookLivenessDb = await JSONFilePreset<HookLivenessData>(
   path.join(dataDir, "hook-liveness.json"),
   { lastEventAt: {} },
 );
+
+/**
+ * User-owned configuration entered through the dashboard rather than the
+ * environment.
+ *
+ * This exists because a packaged `.app` has no `.env` to read: the sidecar is
+ * spawned with cwd `/`, so `dotenv/config` finds nothing and every AI feature
+ * silently no-ops with no way for the user to fix it. The key has to live in
+ * the user-data dir, which survives app updates, and be settable from the UI.
+ */
+export interface SettingsData {
+  /** Anthropic API key entered via the UI. Empty string means "not set". */
+  apiKey: string;
+  /** True once the user has saved a key or explicitly skipped setup, so first-run onboarding stops asking. */
+  setupDismissed: boolean;
+}
+
+export const settingsPath = path.join(dataDir, "settings.json");
+export const settingsDb = await JSONFilePreset<SettingsData>(settingsPath, {
+  apiKey: "",
+  setupDismissed: false,
+});
+
+/**
+ * Persist settings, then re-assert owner-only permissions.
+ *
+ * lowdb writes with the default umask (usually 0644, world-readable), which is
+ * wrong for a file holding an API key. chmod runs after every write because
+ * lowdb writes via a temp file and rename, so the mode does not survive on its
+ * own. Best-effort: a filesystem that cannot chmod must not break saving.
+ */
+export async function writeSettings(): Promise<void> {
+  await settingsDb.write();
+  try {
+    fs.chmodSync(settingsPath, 0o600);
+  } catch {
+    // Non-POSIX filesystem or an exotic mount; the value is still saved.
+  }
+}
+
+// JSONFilePreset creates the file with defaults on first run, so lock it down now.
+try {
+  fs.chmodSync(settingsPath, 0o600);
+} catch {
+  // as above
+}

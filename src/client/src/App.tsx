@@ -1,9 +1,17 @@
 import { useEffect, useState } from "react";
-import type { Project } from "@shared/types";
-import { fetchProjects, triggerScan, updateOverride } from "./api";
+import type { ApiKeyStatus, MissingProjectTriage, Project, SettingsResponse } from "@shared/types";
+import {
+  fetchProjects,
+  fetchRelocations,
+  fetchSettings,
+  relocateProject,
+  triggerScan,
+  updateOverride,
+} from "./api";
 import ProjectGrid from "./ProjectGrid";
 import ProjectDetailPage from "./ProjectDetailPage";
 import AttentionPanel from "./AttentionPanel";
+import ApiKeyPanel from "./ApiKeyPanel";
 import DigestPanel from "./DigestPanel";
 import { relativeTime } from "./format";
 
@@ -25,12 +33,32 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [route, setRoute] = useState<string | null>(parseRoute());
   const [query, setQuery] = useState("");
+  const [settings, setSettings] = useState<SettingsResponse | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [triage, setTriage] = useState<Record<string, MissingProjectTriage> | null>(null);
+  const [bulkRelocating, setBulkRelocating] = useState(false);
 
   useEffect(() => {
     const onHashChange = () => setRoute(parseRoute());
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
+
+  function loadSettings() {
+    // Quiet on failure: a settings fetch that fails must not replace the whole
+    // dashboard with an error, since nothing else depends on it.
+    fetchSettings()
+      .then(setSettings)
+      .catch(() => {});
+  }
+
+  useEffect(loadSettings, []);
+
+  /** After a save/remove the daily-call counters are stale too, so refetch the lot. */
+  function handleApiKeyStatus(apiKey: ApiKeyStatus) {
+    setSettings((prev) => (prev ? { ...prev, apiKey } : prev));
+    loadSettings();
+  }
 
   function load() {
     fetchProjects()
@@ -65,6 +93,51 @@ export default function App() {
     try {
       const res = await updateOverride(path, override);
       setProjects(res.projects);
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
+  // Which folders are missing, as a stable key. The relocation search walks the
+  // filesystem, so it must fire only when that set changes — not on every 30s
+  // project poll.
+  const missingKey = (projects ?? [])
+    .filter((p) => p.missing && !p.hidden)
+    .map((p) => p.path)
+    .join("|");
+
+  useEffect(() => {
+    if (!missingKey) {
+      setTriage(null);
+      return;
+    }
+    let cancelled = false;
+    fetchRelocations()
+      .then((res) => {
+        if (!cancelled) setTriage(Object.fromEntries(res.missing.map((m) => [m.path, m])));
+      })
+      // Quiet: a failed search leaves the cards saying "looking…" rather than
+      // replacing the whole dashboard with an error.
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [missingKey]);
+
+  async function handleRelocate(from: string, to: string) {
+    // Errors propagate to the card, which shows them inline next to the button.
+    const res = await relocateProject(from, to);
+    setProjects(res.projects);
+    setLastScanAt(res.lastScanAt);
+  }
+
+  async function handleUndoMove(oldPaths: string[]) {
+    try {
+      for (const oldPath of oldPaths) {
+        const res = await relocateProject(oldPath, null);
+        setProjects(res.projects);
+        setLastScanAt(res.lastScanAt);
+      }
     } catch (err) {
       setError(String(err));
     }
@@ -108,6 +181,10 @@ export default function App() {
     (p.summary?.text ?? "").toLowerCase().includes(q) ||
     (p.openItems ?? []).some((t) => t.toLowerCase().includes(q));
 
+  // Onboarding shows until a key exists or the user skips — never for a key
+  // that came from the environment, which needs no setup.
+  const showOnboarding = Boolean(settings && !settings.apiKey.configured && !settings.apiKey.setupDismissed);
+
   const visible = projects.filter((p) => !p.hidden && !p.discovered && !p.missing && matches(p));
   const discovered = projects.filter((p) => !p.hidden && p.discovered && !p.missing && matches(p));
   const missing = projects.filter((p) => p.missing && !p.hidden);
@@ -123,7 +200,31 @@ export default function App() {
     onTogglePinned: (path: string, pinned: boolean) => applyOverride(path, { pinned }),
     onKeep: (path: string) => applyOverride(path, {}),
     onSummaryUpdated: handleSummaryUpdated,
+    onUndoMove: handleUndoMove,
   };
+
+  // Only the top candidate counts: a "high" runner-up would mean the guess is
+  // ambiguous, and the server already refuses to call anything high-confidence
+  // unless it is clearly ahead of the alternatives.
+  const confidentMoves = Object.values(triage ?? {})
+    .map((t) => ({ from: t.path, to: t.candidates[0] }))
+    .filter((m) => m.to?.confidence === "high");
+
+  async function relocateAllConfident() {
+    setBulkRelocating(true);
+    try {
+      // Sequential: each relocation re-keys sessions and triggers a rescan.
+      for (const move of confidentMoves) {
+        const res = await relocateProject(move.from, move.to.path);
+        setProjects(res.projects);
+        setLastScanAt(res.lastScanAt);
+      }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBulkRelocating(false);
+    }
+  }
 
   return (
     <main className="shell">
@@ -144,8 +245,31 @@ export default function App() {
           <button onClick={handleRescan} disabled={scanning}>
             {scanning ? "Scanning…" : "Rescan"}
           </button>
+          <button
+            onClick={() => setSettingsOpen((open) => !open)}
+            title="Anthropic API key"
+            aria-label="Settings"
+          >
+            ⚙
+          </button>
         </div>
       </header>
+
+      {/* First run with no key: ask once, up top, where it cannot be missed.
+          Afterwards the same panel lives behind the topbar gear. */}
+      {settings &&
+        (settingsOpen ? (
+          <ApiKeyPanel
+            mode="settings"
+            settings={settings}
+            onStatusChange={handleApiKeyStatus}
+            onClose={() => setSettingsOpen(false)}
+          />
+        ) : (
+          showOnboarding && (
+            <ApiKeyPanel mode="onboarding" settings={settings} onStatusChange={handleApiKeyStatus} />
+          )
+        ))}
 
       <AttentionPanel />
       <DigestPanel />
@@ -158,7 +282,25 @@ export default function App() {
         {...gridProps}
       />
       {missing.length > 0 && (
-        <ProjectGrid title="Missing from disk" projects={missing} collapsible {...gridProps} />
+        <ProjectGrid
+          title="Missing from disk"
+          projects={missing}
+          collapsible
+          headerAction={
+            confidentMoves.length > 0 ? (
+              <button className="section__action" onClick={relocateAllConfident} disabled={bulkRelocating}>
+                {bulkRelocating
+                  ? "Relocating…"
+                  : `Relocate ${confidentMoves.length} confident match${
+                      confidentMoves.length === 1 ? "" : "es"
+                    }`}
+              </button>
+            ) : undefined
+          }
+          triage={triage ?? undefined}
+          onRelocate={handleRelocate}
+          {...gridProps}
+        />
       )}
       <ProjectGrid title="Hidden" projects={hidden} collapsible {...gridProps} />
     </main>

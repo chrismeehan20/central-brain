@@ -1,6 +1,9 @@
+import fs from "node:fs";
 import type { FastifyInstance } from "fastify";
-import type { Override, Project } from "@shared/types.js";
+import type { MissingProjectTriage, Override, Project } from "@shared/types.js";
 import { runScan, getCachedProjects, getLastScanAt, applyOverrideToCache } from "../scan/index.js";
+import { deriveSearchRoots, findRelocations } from "../scan/relocate.js";
+import { relocateProject, undoRelocation } from "../store/relocation.js";
 import { overridesDb } from "../store/db.js";
 import { getGithubStatus } from "../poll/githubPoller.js";
 import { getCachedSummary, getOrGenerateSummary } from "../ai/summarize.js";
@@ -14,6 +17,12 @@ interface OverrideBody {
 
 interface SummarizeBody {
   path: string;
+}
+
+interface RelocateBody {
+  from: string;
+  /** Absolute path the project moved to, or null to undo a relocation. */
+  to: string | null;
 }
 
 function withExtras(projects: Project[]): Project[] {
@@ -67,7 +76,7 @@ export async function projectsRoutes(app: FastifyInstance) {
     const summary = await getOrGenerateSummary(project, true);
     if (!summary) {
       reply.code(503);
-      return { error: "AI summaries unavailable — set ANTHROPIC_API_KEY to enable." };
+      return { error: "AI summaries unavailable — add your Anthropic API key in Settings to enable them." };
     }
     if (summary.lastError && !summary.text) {
       // Nothing usable to show — surface the real failure instead of a silent stale cache.
@@ -77,13 +86,63 @@ export async function projectsRoutes(app: FastifyInstance) {
     return { summary };
   });
 
+  /**
+   * Relocation candidates for every project whose folder has gone missing.
+   *
+   * Kept off `/api/projects` because it walks the filesystem: the dashboard
+   * polls projects every 30s, and this only matters when something is missing.
+   */
+  app.get("/api/projects/relocations", async () => {
+    const projects = getCachedProjects().filter((p) => !p.hidden);
+    const missing = projects.filter((p) => p.missing);
+    const roots = deriveSearchRoots({ livePaths: projects.filter((p) => !p.missing).map((p) => p.path) });
+    const candidates = findRelocations({ missingPaths: missing.map((p) => p.path), roots });
+
+    const triage: MissingProjectTriage[] = missing.map((p) => ({
+      path: p.path,
+      displayName: p.displayName,
+      candidates: candidates[p.path] ?? [],
+    }));
+    return { missing: triage, searchedRoots: roots };
+  });
+
+  app.post<{ Body: RelocateBody }>("/api/projects/relocate", async (req, reply) => {
+    const { from, to } = req.body ?? {};
+    if (!from || typeof from !== "string") {
+      reply.code(400);
+      return { error: "from is required" };
+    }
+
+    if (to === null) {
+      await undoRelocation(from);
+    } else {
+      if (typeof to !== "string" || !to) {
+        reply.code(400);
+        return { error: "to must be an absolute path, or null to undo" };
+      }
+      if (to === from) {
+        reply.code(400);
+        return { error: "a project cannot be relocated to itself" };
+      }
+      if (!fs.existsSync(to)) {
+        reply.code(400);
+        return { error: `${to} does not exist` };
+      }
+      await relocateProject(from, to);
+    }
+
+    // Full rescan: relocating re-keys sessions and merges two cards into one,
+    // which the in-place cache patch used by overrides cannot express.
+    return { projects: withExtras(runScan()), lastScanAt: getLastScanAt() };
+  });
+
   app.get("/api/digest", async () => ({ digest: getCachedDigest() }));
 
   app.post("/api/digest/refresh", async (_req, reply) => {
     const digest = await getOrGenerateDigest(true);
     if (!digest) {
       reply.code(503);
-      return { error: "Digest unavailable — set ANTHROPIC_API_KEY, or wait for some activity." };
+      return { error: "Digest unavailable — add your Anthropic API key in Settings, or wait for some activity." };
     }
     return { digest };
   });

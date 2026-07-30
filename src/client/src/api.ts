@@ -1,4 +1,14 @@
-import type { Project, Override, ProjectSummary, ProjectDetail, DetailItemKind, DailyDigest } from "@shared/types";
+import type {
+  Project,
+  Override,
+  ProjectSummary,
+  ProjectDetail,
+  DetailItemKind,
+  DailyDigest,
+  ApiKeyStatus,
+  SettingsResponse,
+  MissingProjectTriage,
+} from "@shared/types";
 
 export async function fetchProjects(): Promise<{ projects: Project[]; lastScanAt: string | null }> {
   const res = await fetch("/api/projects");
@@ -22,6 +32,32 @@ export async function updateOverride(
     body: JSON.stringify({ path, override }),
   });
   if (!res.ok) throw new Error(`Failed to update override: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchRelocations(): Promise<{
+  missing: MissingProjectTriage[];
+  searchedRoots: string[];
+}> {
+  const res = await fetch("/api/projects/relocations");
+  if (!res.ok) throw new Error(`Failed to look for moved folders: ${res.status}`);
+  return res.json();
+}
+
+/** `to: null` undoes a previous relocation. */
+export async function relocateProject(
+  from: string,
+  to: string | null
+): Promise<{ projects: Project[]; lastScanAt: string | null }> {
+  const res = await fetch("/api/projects/relocate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Failed to relocate: ${res.status}`);
+  }
   return res.json();
 }
 
@@ -98,4 +134,43 @@ export function updateDetailItem(
 
 export function saveDetailNotes(path: string, notes: string): Promise<ProjectDetail> {
   return detailRequest("/api/projects/detail/notes", "PUT", { path, notes });
+}
+
+export async function fetchSettings(): Promise<SettingsResponse> {
+  const res = await fetch("/api/settings");
+  if (!res.ok) throw new Error(`Failed to load settings: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Every api-key mutation returns the new status. Errors propagate the server's
+ * message verbatim — for a rejected key that message ("Anthropic rejected that
+ * key…") is the entire value of the response.
+ */
+async function apiKeyRequest(
+  url: string,
+  method: string,
+  body?: Record<string, unknown>
+): Promise<ApiKeyStatus> {
+  const res = await fetch(url, {
+    method,
+    ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? `Request failed: ${res.status}`);
+  }
+  return (await res.json()).apiKey;
+}
+
+export function saveApiKey(apiKey: string): Promise<ApiKeyStatus> {
+  return apiKeyRequest("/api/settings/api-key", "PUT", { apiKey });
+}
+
+export function clearApiKey(): Promise<ApiKeyStatus> {
+  return apiKeyRequest("/api/settings/api-key", "DELETE");
+}
+
+export function dismissApiKeySetup(): Promise<ApiKeyStatus> {
+  return apiKeyRequest("/api/settings/dismiss-setup", "POST");
 }
