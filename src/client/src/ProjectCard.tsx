@@ -65,6 +65,40 @@ export default function ProjectCard({
   const docs = showAllDocs ? project.markdown : project.markdown.slice(0, MAX_DOC_CHIPS);
   const hiddenDocCount = project.markdown.length - docs.length;
 
+  /**
+   * Two channels instead of one row of pills.
+   *
+   * `flags` are states that should make you look — a folder that vanished, CI
+   * that went red. Those keep a coloured pill, and they are the only things
+   * that get one. Everything else is `meta`: true, useful, and not urgent, so
+   * it reads as one quiet line. A card previously carried up to eight pills,
+   * which left nothing able to stand out.
+   */
+  const ci = project.github?.ciStatus?.toLowerCase();
+  const flags: { kind: string; label: string; title?: string }[] = [];
+  if (project.missing) {
+    flags.push({
+      kind: "gone",
+      label: "folder gone",
+      title: "This folder no longer exists on disk (moved or deleted)",
+    });
+  }
+  if (ci === "failure") flags.push({ kind: "failing", label: "CI failing" });
+
+  const prCount = project.github?.openPrs?.length ?? 0;
+  const meta = [
+    counts.claude > 0 ? `${counts.claude} Claude` : "",
+    counts.codex > 0 ? `${counts.codex} Codex` : "",
+    // "uncommitted" rather than a bare dot: a status dot makes the reader guess.
+    project.github?.branch
+      ? project.github.dirty
+        ? `${project.github.branch}, uncommitted`
+        : project.github.branch
+      : "",
+    prCount > 0 ? `${prCount} open PR${prCount === 1 ? "" : "s"}` : "",
+    ci && ci !== "failure" ? `CI ${ci}` : "",
+  ].filter(Boolean);
+
   async function refreshSummary() {
     setSummarizing(true);
     setSummaryError(null);
@@ -114,29 +148,21 @@ export default function ProjectCard({
         <span className="card__activity">{relativeTime(project.lastActivity)}</span>
       </div>
 
-      <div className="card__badges">
-        {project.missing && (
-          <span className="badge badge--missing" title="This folder no longer exists on disk (moved or deleted)">
-            folder gone
-          </span>
-        )}
-        {counts.claude > 0 && <span className="badge badge--claude">Claude ×{counts.claude}</span>}
-        {counts.codex > 0 && <span className="badge badge--codex">Codex ×{counts.codex}</span>}
-        {project.github?.branch && (
-          <span className="badge badge--git" title={project.github.lastCommitMessage}>
-            {project.github.branch}
-            {project.github.dirty ? " •" : ""}
-          </span>
-        )}
-        {!!project.github?.openPrs?.length && (
-          <span className="badge badge--pr">PR ×{project.github.openPrs.length}</span>
-        )}
-        {project.github?.ciStatus && (
-          <span className={`badge badge--ci badge--ci-${project.github.ciStatus.toLowerCase()}`}>
-            {project.github.ciStatus}
-          </span>
-        )}
-      </div>
+      {flags.length > 0 && (
+        <div className="card__flags">
+          {flags.map((flag) => (
+            <span key={flag.label} className={`flag flag--${flag.kind}`} title={flag.title}>
+              {flag.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {meta.length > 0 && (
+        <p className="card__meta" title={project.github?.lastCommitMessage}>
+          {meta.join(" · ")}
+        </p>
+      )}
 
       {project.missing && onRelocate && (
         <div className="relocate">
@@ -153,10 +179,10 @@ export default function ProjectCard({
                 <span>Looks like it moved to</span>
                 {chosen && (
                   <span
-                    className={`badge badge--confidence-${chosen.confidence}`}
+                    className={`relocate__confidence relocate__confidence--${chosen.confidence}`}
                     title={`${chosen.confidence} confidence — ${chosen.reason}`}
                   >
-                    {chosen.confidence}
+                    {chosen.confidence} confidence
                   </span>
                 )}
               </div>
@@ -201,29 +227,35 @@ export default function ProjectCard({
         </div>
       )}
 
+      {/* Filenames, not statuses — so they read as a list of links rather than
+          a wall of tags. Still links: clicking opens the file in VS Code. */}
       {project.markdown.length > 0 && (
-        <div className="card__docs">
-          {docs.map((doc) => (
-            <a
-              key={doc.file}
-              className="doc-chip"
-              href={`vscode://file/${encodeURI(doc.file)}`}
-              title={doc.file}
-            >
-              {doc.relativePath}
-            </a>
+        <p className="card__docs">
+          {docs.map((doc, i) => (
+            <span key={doc.file}>
+              {i > 0 && <span className="card__doc-sep">, </span>}
+              <a className="card__doc" href={`vscode://file/${encodeURI(doc.file)}`} title={doc.file}>
+                {doc.relativePath}
+              </a>
+            </span>
           ))}
           {hiddenDocCount > 0 && (
-            <button className="doc-chip doc-chip--more" onClick={() => setShowAllDocs(true)}>
-              +{hiddenDocCount} more
-            </button>
+            <>
+              <span className="card__doc-sep">, </span>
+              <button className="card__doc-more" onClick={() => setShowAllDocs(true)}>
+                +{hiddenDocCount} more
+              </button>
+            </>
           )}
           {showAllDocs && project.markdown.length > MAX_DOC_CHIPS && (
-            <button className="doc-chip doc-chip--more" onClick={() => setShowAllDocs(false)}>
-              show fewer
-            </button>
+            <>
+              <span className="card__doc-sep"> </span>
+              <button className="card__doc-more" onClick={() => setShowAllDocs(false)}>
+                show fewer
+              </button>
+            </>
           )}
-        </div>
+        </p>
       )}
 
       <div className="card__summary">

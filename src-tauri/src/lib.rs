@@ -67,7 +67,13 @@ pub fn run() {
             };
 
             TrayIconBuilder::with_id("central-brain-tray")
-                .icon(app.default_window_icon().unwrap().clone())
+                // A dedicated monochrome mark, NOT the app icon. The menubar
+                // was showing `default_window_icon()` — a full-colour square
+                // that macOS cannot tint, so it ignored the light/dark menubar
+                // and sat there as the stock Tauri logo. A template image is
+                // black + alpha; the system inverts and dims it to match.
+                .icon(tauri::include_image!("icons/trayTemplate.png"))
+                .icon_as_template(true)
                 .tooltip(tooltip)
                 .menu(&menu)
                 .show_menu_on_left_click(false)

@@ -137,9 +137,9 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
         </div>
         <div className="detail__meta">
           {project?.github?.branch && (
-            <span className="badge badge--git" title={project.github.lastCommitMessage}>
+            <span className="detail__branch" title={project.github.lastCommitMessage}>
               {project.github.branch}
-              {project.github.dirty ? " •" : ""}
+              {project.github.dirty ? ", uncommitted" : ""}
             </span>
           )}
           <span className="scan-time">active {relativeTime(project?.lastActivity)}</span>
@@ -240,7 +240,7 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
                 <ul className="activity">
                   {activity.map((a, i) => (
                     <li key={i} className="activity__row">
-                      <span className={`badge badge--${a.label === "commit" ? "git" : a.label}`}>{a.label}</span>
+                      <span className={`activity__label activity__label--${a.label}`}>{a.label}</span>
                       <span className="activity__text">{a.text}</span>
                       <span className="activity__age">{relativeTime(a.at)}</span>
                     </li>
@@ -264,18 +264,20 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
                 onBlur={commitNotes}
               />
               {project && project.markdown.length > 0 && (
-                <div className="card__docs detail__docs">
-                  {project.markdown.map((doc) => (
-                    <a
-                      key={doc.file}
-                      className="doc-chip"
-                      href={`vscode://file/${encodeURI(doc.file)}`}
-                      title={doc.file}
-                    >
-                      {doc.relativePath}
-                    </a>
+                <p className="card__docs detail__docs">
+                  {project.markdown.map((doc, i) => (
+                    <span key={doc.file}>
+                      {i > 0 && <span className="card__doc-sep">, </span>}
+                      <a
+                        className="card__doc"
+                        href={`vscode://file/${encodeURI(doc.file)}`}
+                        title={doc.file}
+                      >
+                        {doc.relativePath}
+                      </a>
+                    </span>
                   ))}
-                </div>
+                </p>
               )}
             </section>
           </div>
