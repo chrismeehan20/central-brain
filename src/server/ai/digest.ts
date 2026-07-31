@@ -9,6 +9,9 @@ import { getAnthropic } from "./client.js";
 
 const WINDOW_MS = 24 * 60 * 60_000;
 
+/** Bump when the digest prompt changes so cached digests regenerate. */
+const PROMPT_VERSION = 2;
+
 /** Last-24h activity, a few lines per project — the digest's evidence and its hash input. */
 function buildContext(): string {
   const cutoff = new Date(Date.now() - WINDOW_MS).toISOString();
@@ -49,7 +52,7 @@ export async function getOrGenerateDigest(force = false): Promise<DailyDigest | 
 
   if (!context) return cached; // nothing moved in 24h — keep whatever we had
 
-  const hash = hashInput(`${today()}\n${context}`);
+  const hash = hashInput(`v${PROMPT_VERSION}\n${today()}\n${context}`);
   if (!force && cached && cached.hash === hash) return cached;
   if (force && isDebounced(cached?.generatedAt)) return cached;
 
@@ -74,9 +77,9 @@ export async function getOrGenerateDigest(force = false): Promise<DailyDigest | 
           role: "user",
           content:
             "You're helping a developer who juggles many side projects. From the last-24h activity below, write " +
-            "ONE tight paragraph (3-5 sentences) telling them what moved across their projects and what most " +
-            "needs their attention next. Name the projects. Plain text only — no markdown, no asterisks, no " +
-            "bullet points, no preamble.\n\n" +
+            "ONE tight paragraph (3-4 sentences) telling them what moved across their projects. Wrap each " +
+            "project name in **double asterisks**; use no other markdown, no bullet points, no preamble. " +
+            "The final sentence must state the single thing that most needs their attention next.\n\n" +
             context,
         },
       ],
