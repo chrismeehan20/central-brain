@@ -1,15 +1,16 @@
 import { useState } from "react";
 import type { MissingProjectTriage, Project } from "@shared/types";
 import { relativeTime } from "./format";
-import { summarizeProject } from "./api";
+import { openInVsCode, summarizeProject } from "./api";
 import { goToProject } from "./App";
+import { EyeIcon, EyeOffIcon, PinIcon } from "./Icons";
 
 interface Props {
   project: Project;
   onRename: (path: string, displayName: string) => void;
   onToggleHidden: (path: string, hidden: boolean) => void;
   onTogglePinned: (path: string, pinned: boolean) => void;
-  onKeep?: (path: string) => void;
+  onDismissNew?: (path: string) => void;
   onSummaryUpdated?: (path: string, summary: Project["summary"]) => void;
   /** Present only for missing projects, once the search for a new home has run. */
   triage?: MissingProjectTriage;
@@ -28,7 +29,7 @@ export default function ProjectCard({
   onRename,
   onToggleHidden,
   onTogglePinned,
-  onKeep,
+  onDismissNew,
   onSummaryUpdated,
   triage,
   onRelocate,
@@ -42,6 +43,8 @@ export default function ProjectCard({
   const [chosenTarget, setChosenTarget] = useState<string | null>(null);
   const [relocating, setRelocating] = useState(false);
   const [relocateError, setRelocateError] = useState<string | null>(null);
+  const [opening, setOpening] = useState(false);
+  const [openError, setOpenError] = useState<string | null>(null);
   const counts = toolCounts(project);
 
   const candidates = triage?.candidates ?? [];
@@ -112,6 +115,18 @@ export default function ProjectCard({
     }
   }
 
+  async function openProject() {
+    setOpening(true);
+    setOpenError(null);
+    try {
+      await openInVsCode(project.path);
+    } catch (err) {
+      setOpenError(String((err as Error).message ?? err));
+    } finally {
+      setOpening(false);
+    }
+  }
+
   function commitRename() {
     setEditing(false);
     const trimmed = nameDraft.trim();
@@ -123,7 +138,9 @@ export default function ProjectCard({
   }
 
   return (
-    <div className={`card${project.pinned ? " card--pinned" : ""}`}>
+    <div
+      className={`card${project.pinned ? " card--pinned" : ""}${project.hidden ? " card--hidden" : ""}`}
+    >
       <div className="card__header">
         {editing ? (
           <input
@@ -143,6 +160,16 @@ export default function ProjectCard({
         ) : (
           <button className="card__name" onClick={() => setEditing(true)} title="Click to rename">
             {project.displayName}
+          </button>
+        )}
+        {project.discovered && onDismissNew && (
+          <button
+            className="card__new"
+            title="Newly discovered — click to dismiss"
+            aria-label={`Dismiss New badge for ${project.displayName}`}
+            onClick={() => onDismissNew(project.path)}
+          >
+            New
           </button>
         )}
         <span className="card__activity">{relativeTime(project.lastActivity)}</span>
@@ -272,25 +299,50 @@ export default function ProjectCard({
         )}
       </div>
 
-      <div className="card__path" title={project.path}>
-        {project.path}
-      </div>
+      {project.missing ? (
+        <div className="card__path" title={project.path}>
+          {project.path}
+        </div>
+      ) : (
+        <button
+          className="card__path card__path--open"
+          title="Open this folder in VS Code"
+          onClick={openProject}
+          disabled={opening}
+        >
+          {project.path}
+        </button>
+      )}
+      {openError && <span className="card__summary-error">{openError}</span>}
 
       <div className="card__actions">
-        {project.discovered && onKeep && (
-          <button className="card__keep" onClick={() => onKeep(project.path)}>
-            Keep
+        {!project.missing && (
+          <button onClick={openProject} disabled={opening} title="Open this folder in VS Code">
+            {opening ? "Opening…" : "VS Code"}
           </button>
         )}
         <button className="card__details" onClick={() => goToProject(project.path)}>
           Details →
         </button>
-        <button onClick={() => onTogglePinned(project.path, !project.pinned)}>
-          {project.pinned ? "Unpin" : "Pin"}
-        </button>
-        <button onClick={() => onToggleHidden(project.path, !project.hidden)}>
-          {project.hidden ? "Unhide" : "Hide"}
-        </button>
+        <div className="card__actions-right">
+          <button
+            className={`card__icon-btn${project.pinned ? " card__icon-btn--active" : ""}`}
+            onClick={() => onTogglePinned(project.path, !project.pinned)}
+            title={project.pinned ? "Unpin project" : "Pin project"}
+            aria-label={project.pinned ? "Unpin project" : "Pin project"}
+            aria-pressed={project.pinned}
+          >
+            <PinIcon filled={project.pinned} />
+          </button>
+          <button
+            className="card__icon-btn"
+            onClick={() => onToggleHidden(project.path, !project.hidden)}
+            title={project.hidden ? "Unhide project" : "Hide project"}
+            aria-label={project.hidden ? "Unhide project" : "Hide project"}
+          >
+            {project.hidden ? <EyeOffIcon /> : <EyeIcon />}
+          </button>
+        </div>
       </div>
     </div>
   );

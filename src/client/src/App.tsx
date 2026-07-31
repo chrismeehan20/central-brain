@@ -185,8 +185,7 @@ export default function App() {
   // that came from the environment, which needs no setup.
   const showOnboarding = Boolean(settings && !settings.apiKey.configured && !settings.apiKey.setupDismissed);
 
-  const visible = projects.filter((p) => !p.hidden && !p.discovered && !p.missing && matches(p));
-  const discovered = projects.filter((p) => !p.hidden && p.discovered && !p.missing && matches(p));
+  const visible = projects.filter((p) => !p.hidden && !p.missing && matches(p));
   const missing = projects.filter((p) => p.missing && !p.hidden);
   const hidden = projects.filter((p) => p.hidden);
 
@@ -198,7 +197,7 @@ export default function App() {
     onRename: (path: string, displayName: string) => applyOverride(path, { displayName }),
     onToggleHidden: (path: string, hidden: boolean) => applyOverride(path, { hidden }),
     onTogglePinned: (path: string, pinned: boolean) => applyOverride(path, { pinned }),
-    onKeep: (path: string) => applyOverride(path, {}),
+    onDismissNew: (path: string) => applyOverride(path, {}),
     onSummaryUpdated: handleSummaryUpdated,
     onUndoMove: handleUndoMove,
   };
@@ -274,11 +273,14 @@ export default function App() {
       <AttentionPanel />
       <DigestPanel />
 
-      <ProjectGrid title="Projects" projects={visible} {...gridProps} />
       <ProjectGrid
-        title="Discovered — needs triage"
-        projects={discovered}
-        emptyLabel="Nothing new to triage."
+        title="Projects"
+        projects={visible}
+        emptyLabel={
+          query.trim()
+            ? "Nothing matches your search."
+            : "No projects yet — start a Claude or Codex session in a repo."
+        }
         {...gridProps}
       />
       {missing.length > 0 && (

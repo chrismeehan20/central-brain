@@ -32,9 +32,13 @@ plain JSON files under `data/`.
 - **AI "what's left" summaries** — an optional one-line summary per project
   generated from its docs + recent session activity (Claude Haiku, cached
   and hash-gated so it doesn't re-run until something actually changes).
-- **Rename / hide / pin** — auto-discovered folders land in a "needs triage"
-  section; keep, rename to a clean product name, hide, or pin any project.
-  These decisions persist across rescans.
+  Only projects active in the last 30 days are summarized automatically;
+  a card's manual Refresh always works.
+- **Rename / hide / pin** — auto-discovered folders appear straight in the
+  Projects grid with a "New" badge (click it to dismiss; renaming, pinning,
+  or hiding also dismisses it). Rename to a clean product name, hide junk
+  with the eye button, or pin what matters. These decisions persist across
+  rescans.
 
 ## Setup
 
@@ -173,5 +177,5 @@ Runs the Fastify API (`:4317`) and the Vite dev server (`:5173`, proxying
 - The `Notification` Claude Code hook event conflates "truly blocked" with
   "idle for ~60s"; both surface as "waiting" in the panel.
 - Project identity is the canonical filesystem path — if you move a repo,
-  it'll show up as a new "discovered" project and your old rename/hide
+  it'll show up as a new project with a "New" badge and your old rename/hide
   decisions for the old path won't carry over.

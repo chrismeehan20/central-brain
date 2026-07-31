@@ -148,6 +148,33 @@ h1 {
   border-bottom: none;
 }
 
+/* Attention rows are buttons (click = open the project in VS Code). */
+button.attention__item {
+  background: none;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0;
+  font-size: 0.85rem;
+  text-align: left;
+  width: 100%;
+  color: inherit;
+}
+
+button.attention__item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+button.attention__item:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.attention__error {
+  margin: 0.5rem 0 0;
+  color: var(--danger);
+  font-size: 0.78rem;
+}
+
 .attention__badge {
   font-weight: 600;
   font-size: 0.72rem;
@@ -222,6 +249,7 @@ h1 {
 
 .digest__text {
   margin: 0;
+  max-width: 68ch;
   font-size: 0.88rem;
   line-height: 1.5;
   color: var(--ink);
@@ -583,6 +611,22 @@ h1 {
   white-space: nowrap;
 }
 
+/* The path rendered as a button (click = open the folder in VS Code). */
+.card__path--open {
+  background: none;
+  border: none;
+  padding: 0;
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: "SF Mono", Menlo, monospace;
+}
+
+.card__path--open:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
 .card__actions {
   display: flex;
   gap: 0.4rem;
@@ -604,13 +648,55 @@ h1 {
   border-color: var(--accent);
 }
 
-.card__keep {
-  color: var(--accent) !important;
-  border-color: var(--accent) !important;
-}
-
 .card__details {
   color: var(--accent) !important;
+}
+
+/* "New" chip: informational, accent-tinted like .ditem__origin--ai — not a
+   .flag, which is reserved for states worth interrupting for. Clicking it
+   dismisses the badge (writes an empty override). */
+.card__new {
+  background: rgba(125, 211, 252, 0.12);
+  border: none;
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: var(--radius-control);
+  padding: 0.12rem 0.45rem;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.card__new:hover {
+  background: rgba(125, 211, 252, 0.25);
+}
+
+/* Pin/Hide as icon buttons, grouped at the right edge of the action row. */
+.card__actions-right {
+  margin-left: auto;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.card__actions .card__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.4rem;
+}
+
+.card__icon-btn--active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Hidden cards: present but visibly parked. Full strength on hover so the
+   unhide target is comfortable. */
+.card--hidden {
+  opacity: 0.55;
+}
+
+.card--hidden:hover {
+  opacity: 1;
 }
 
 /* ---- Project detail page ---- */
@@ -888,6 +974,36 @@ h1 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Chat rows are buttons (click = open the project in VS Code). */
+button.activity__text--open {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  text-align: left;
+  /* Truncate the text span, not the button — the ↗ glyph stays visible. */
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+}
+
+button.activity__text--open:hover {
+  text-decoration: underline;
+}
+
+.activity__open-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity__open-glyph {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 
 .activity__age {

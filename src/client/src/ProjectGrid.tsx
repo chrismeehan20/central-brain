@@ -11,7 +11,7 @@ interface Props {
   onRename: (path: string, displayName: string) => void;
   onToggleHidden: (path: string, hidden: boolean) => void;
   onTogglePinned: (path: string, pinned: boolean) => void;
-  onKeep?: (path: string) => void;
+  onDismissNew?: (path: string) => void;
   onSummaryUpdated?: (path: string, summary: Project["summary"]) => void;
   triage?: Record<string, MissingProjectTriage>; // keyed by project path
   onRelocate?: (from: string, to: string) => Promise<void>;
@@ -27,7 +27,7 @@ export default function ProjectGrid({
   onRename,
   onToggleHidden,
   onTogglePinned,
-  onKeep,
+  onDismissNew,
   onSummaryUpdated,
   triage,
   onRelocate,
@@ -65,7 +65,7 @@ export default function ProjectGrid({
               onRename={onRename}
               onToggleHidden={onToggleHidden}
               onTogglePinned={onTogglePinned}
-              onKeep={onKeep}
+              onDismissNew={onDismissNew}
               onSummaryUpdated={onSummaryUpdated}
               triage={triage?.[p.path]}
               onRelocate={onRelocate}

@@ -123,7 +123,7 @@ export interface ProjectDetail {
 export interface Project {
   path: string; // canonical absolute path (real on-disk casing; case-insensitive merged)
   displayName: string;
-  discovered: boolean; // true = auto-discovered, not yet triaged
+  discovered: boolean; // true = no override saved yet — the dashboard shows a "New" chip
   hidden: boolean;
   pinned: boolean;
   missing: boolean; // true = the folder no longer exists on disk (moved/deleted)
