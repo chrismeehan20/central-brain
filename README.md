@@ -8,7 +8,13 @@ an agent is blocked waiting on your review or a permission decision, via a
 desktop notification and a pinned panel in the dashboard.
 
 Runs entirely on your machine. No SaaS, no external server. Everything is
-plain JSON files under `data/`.
+plain JSON files in the platform user-data directory
+(`~/Library/Application Support/central-brain/` on macOS).
+
+**macOS only.** The menubar app, desktop notifications, and install flow are
+all Mac-specific. (The server itself is portable Node, so a determined
+Linux/Windows user could run `node dist/server-bundle.mjs` and use the browser
+dashboard, but that path is neither packaged nor supported.)
 
 ## What it does
 
@@ -39,24 +45,66 @@ plain JSON files under `data/`.
   or hiding also dismisses it). Rename to a clean product name, hide junk
   with the eye button, or pin what matters. These decisions persist across
   rescans.
+- **Settings, not assumptions** — the ⚙ panel can mute desktop notifications
+  (the attention panel keeps updating silently) and pick which editor doc
+  links and "Open" buttons target: VS Code, Cursor, VSCodium, or Windsurf.
+  "Launch at login" lives in the tray menu.
 
-## Setup
+## Install
+
+**Prerequisites:** macOS with [Node.js](https://nodejs.org) ≥ 22.5 (any
+install method — Homebrew, nvm, volta, fnm, asdf, and mise are all found
+automatically). Optional: the [`gh` CLI](https://cli.github.com) for GitHub
+status, `terminal-notifier` for nicer notifications.
+
+1. Download the `.dmg` (or `.app` zip) from the
+   [latest release](https://github.com/chrismeehan20/central-brain/releases)
+   and drag **Central Brain.app** to `/Applications`.
+2. The app is not code-signed, so macOS will quarantine it on first launch.
+   Clear that once:
+
+   ```bash
+   xattr -dc "/Applications/Central Brain.app"
+   ```
+
+   (or launch it, then approve it under **System Settings → Privacy &
+   Security → Open Anyway**.)
+3. Launch it and install the hooks that push "agent is waiting on you" events
+   (each installer skips politely if you don't use that tool):
+
+   ```bash
+   git clone https://github.com/chrismeehan20/central-brain.git && cd central-brain
+   npm install
+   npm run install-hooks        # wires Claude Code hook events into ~/.claude/settings.json
+   npm run install-codex-hooks  # wires Codex hook events into $CODEX_HOME/hooks.json
+   ```
+
+The app runs the server itself — there is no separate service to install and
+nothing to start by hand. Without the hooks everything still works except the
+push alerts; sessions are discovered by scanning either way.
+
+### Building from source instead
+
+Additional prerequisites: a [Rust toolchain](https://rustup.rs) and the Xcode
+Command Line Tools (`xcode-select --install`).
 
 ```bash
 npm install
 npm run build
-npm run install-hooks        # wires Claude Code hook events into ~/.claude/settings.json
-npm run install-codex-hooks  # wires Codex hook events into $CODEX_HOME/hooks.json
+npm run install-hooks
+npm run install-codex-hooks
 npm run menubar:build        # builds the menubar app that runs the server
 ```
 
 Then move `src-tauri/target/release/bundle/macos/Central Brain.app` to
-`/Applications` and launch it. The app runs the server itself — there is no
-separate service to install and nothing to start by hand.
+`/Applications` and launch it.
 
 The dashboard is at **http://localhost:4317** (also the tray menu's "Open in
 browser"), but you don't need a browser: clicking the tray icon opens it as a
-popover.
+popover. If something else already owns 4317 (it's also the OTLP gRPC
+default), the app honors `CENTRAL_BRAIN_PORT` — see `.env.example` for that
+and every other knob (`CENTRAL_BRAIN_NODE`, `CENTRAL_BRAIN_DATA_DIR`, hook
+URLs, AI cost controls).
 
 `install-hooks` backs up your existing `~/.claude/settings.json` first and
 only *appends* new hook entries — it never touches hooks you already have
@@ -86,7 +134,9 @@ Three details exist because of specific failures:
 - **The interpreter is resolved by absolute path**, not from `PATH`. A `.app`
   launched from Finder or at login gets roughly `/usr/bin:/bin:/usr/sbin:/sbin`,
   so spawning bare `node` works under `tauri dev` and fails *only* in the
-  packaged app.
+  packaged app. Homebrew/MacPorts locations are tried first, then
+  nvm/volta/fnm/asdf/mise installs (newest version wins); `CENTRAL_BRAIN_NODE`
+  overrides the search entirely.
 - **The child gets a stdin pipe it never reads.** When the app dies for any
   reason — quit, SIGTERM, SIGKILL, crash — the OS closes the write end, the
   server sees EOF and exits. Without this, killing the app left the server
@@ -139,6 +189,15 @@ npm run dev
 Runs the Fastify API (`:4317`) and the Vite dev server (`:5173`, proxying
 `/api` to the backend) with hot reload on both sides.
 
+Releases are cut by pushing a `v*` tag (after bumping the version in
+`package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`);
+`.github/workflows/release.yml` builds the app on a macOS runner and attaches
+it to a GitHub Release.
+
+`docs/decisions/` is the project's internal engineering log — findings and
+machine-specific measurements from building this, kept as history rather than
+as user documentation.
+
 ## How it works
 
 - **Read pipeline** (`src/server/scan/`) — reads Claude Code's
@@ -155,7 +214,7 @@ Runs the Fastify API (`:4317`) and the Vite dev server (`:5173`, proxying
   back at the keyboard. Pushed live to the dashboard over SSE
   (`GET /api/stream`).
 - **Hook liveness** (`src/server/alert/hookLiveness.ts`) — every hook event
-  stamps `data/hook-liveness.json`. If a Codex hook event has landed within
+  stamps `hook-liveness.json`. If a Codex hook event has landed within
   the last 7 days (`CODEX_HOOK_LIVE_MS`), the staleness heuristic stands down
   entirely and drops its guesses, because hooks are authoritative. Reported at
   `GET /api/attention` as `hooks.codex`.

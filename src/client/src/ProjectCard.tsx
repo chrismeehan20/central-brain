@@ -3,6 +3,7 @@ import type { MissingProjectTriage, Project } from "@shared/types";
 import { relativeTime } from "./format";
 import { openInVsCode, summarizeProject } from "./api";
 import { goToProject } from "./App";
+import { useDocHref } from "./prefs";
 import { EyeIcon, EyeOffIcon, PinIcon } from "./Icons";
 
 interface Props {
@@ -46,6 +47,7 @@ export default function ProjectCard({
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
   const counts = toolCounts(project);
+  const docHref = useDocHref();
 
   const candidates = triage?.candidates ?? [];
   const target = chosenTarget ?? candidates[0]?.path ?? null;
@@ -261,7 +263,7 @@ export default function ProjectCard({
           {docs.map((doc, i) => (
             <span key={doc.file}>
               {i > 0 && <span className="card__doc-sep">, </span>}
-              <a className="card__doc" href={`vscode://file/${encodeURI(doc.file)}`} title={doc.file}>
+              <a className="card__doc" href={docHref(doc.file)} title={doc.file}>
                 {doc.relativePath}
               </a>
             </span>

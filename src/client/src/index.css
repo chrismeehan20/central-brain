@@ -1197,6 +1197,39 @@ button.activity__text--open:hover {
   color: var(--accent);
 }
 
+.setup__prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border);
+}
+
+.setup__pref {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+
+.setup__pref-hint {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.setup__pref-select {
+  margin-left: auto;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.78rem;
+}
+
 .setup__footer {
   display: flex;
   align-items: center;

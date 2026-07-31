@@ -1,0 +1,77 @@
+name: Release
+
+# Builds the macOS menubar app and attaches it to a GitHub Release.
+# Runs on version tags (v0.1.0, v1.2.3, …); workflow_dispatch is for dry runs —
+# it builds and uploads artifacts but does not create a release.
+#
+# The .app is ad-hoc signed only (Tauri's default). Downloaders clear the
+# quarantine flag per the README's install instructions. To ship a properly
+# signed + notarized build later, add an Apple Developer certificate and fill
+# in the commented signing env below — nothing else needs to change.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      # npm run build (vite + tsc + server bundle) runs inside menubar:build.
+      - run: npm run menubar:build
+        # To sign and notarize, provision these repo secrets and uncomment:
+        # env:
+        #   APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        #   APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        #   APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        #   APPLE_ID: ${{ secrets.APPLE_ID }}
+        #   APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        #   APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      # ditto preserves the resource forks/xattrs a plain zip would strip.
+      - name: Zip the .app
+        run: |
+          cd "src-tauri/target/release/bundle/macos"
+          ditto -c -k --keepParent "Central Brain.app" "Central-Brain-macOS.app.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: central-brain-macos
+          path: |
+            src-tauri/target/release/bundle/macos/Central-Brain-macOS.app.zip
+            src-tauri/target/release/bundle/dmg/*.dmg
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "Central Brain ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            "src-tauri/target/release/bundle/macos/Central-Brain-macOS.app.zip" \
+            src-tauri/target/release/bundle/dmg/*.dmg

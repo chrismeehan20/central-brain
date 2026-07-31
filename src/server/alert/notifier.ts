@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { getPreferences } from "../store/db.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -28,6 +29,10 @@ export interface NotifyOptions {
  * click-to-activate), otherwise osascript (ships with every Mac).
  */
 export async function notify({ title, body, sound }: NotifyOptions): Promise<void> {
+  // Gated here, not at call sites, so muting covers every alert path at once.
+  // Muting only silences the desktop banner — the attention panel and SSE
+  // stream still update.
+  if (!getPreferences().notifications) return;
   try {
     if (await checkTerminalNotifier()) {
       const args = ["-title", title, "-message", body];

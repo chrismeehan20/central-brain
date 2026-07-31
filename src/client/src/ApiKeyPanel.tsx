@@ -1,6 +1,7 @@
 import { useState } from "react";
-import type { ApiKeyStatus, SettingsResponse } from "@shared/types";
-import { clearApiKey, dismissApiKeySetup, saveApiKey } from "./api";
+import type { ApiKeyStatus, EditorId, Preferences, SettingsResponse } from "@shared/types";
+import { EDITORS } from "@shared/types";
+import { clearApiKey, dismissApiKeySetup, saveApiKey, updatePreferences } from "./api";
 
 /**
  * Anthropic API key setup, in two guises.
@@ -18,17 +19,28 @@ interface Props {
   mode: "onboarding" | "settings";
   settings: SettingsResponse;
   onStatusChange: (status: ApiKeyStatus) => void;
+  onPreferencesChange?: (preferences: Preferences) => void;
   onClose?: () => void;
 }
 
 const CONSOLE_URL = "https://console.anthropic.com/settings/keys";
 
-export default function ApiKeyPanel({ mode, settings, onStatusChange, onClose }: Props) {
-  const { apiKey: status, ai } = settings;
+export default function ApiKeyPanel({ mode, settings, onStatusChange, onPreferencesChange, onClose }: Props) {
+  const { apiKey: status, ai, preferences } = settings;
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [prefsError, setPrefsError] = useState<string | null>(null);
+
+  async function applyPreferences(patch: Partial<Preferences>) {
+    setPrefsError(null);
+    try {
+      onPreferencesChange?.(await updatePreferences(patch));
+    } catch (err) {
+      setPrefsError((err as Error).message ?? String(err));
+    }
+  }
 
   async function run(action: () => Promise<ApiKeyStatus>, clearInput: boolean) {
     setBusy(true);
@@ -54,7 +66,7 @@ export default function ApiKeyPanel({ mode, settings, onStatusChange, onClose }:
     <section className={`setup ${mode === "onboarding" ? "setup--onboarding" : ""}`}>
       <div className="setup__header">
         <h2 className="setup__title">
-          {mode === "onboarding" ? "Turn on AI summaries" : "Anthropic API key"}
+          {mode === "onboarding" ? "Turn on AI summaries" : "Settings"}
         </h2>
         {onClose && (
           <button className="setup__close" onClick={onClose} aria-label="Close settings">
@@ -123,6 +135,43 @@ export default function ApiKeyPanel({ mode, settings, onStatusChange, onClose }:
 
       {error && <p className="setup__error">{error}</p>}
       {saved && !error && <p className="setup__ok">Key verified and saved. AI features are on.</p>}
+
+      {/* Preferences live behind the gear only — onboarding stays a single ask. */}
+      {mode === "settings" && (
+        <div className="setup__prefs">
+          <label className="setup__pref">
+            <input
+              type="checkbox"
+              checked={preferences.notifications}
+              onChange={(e) => applyPreferences({ notifications: e.target.checked })}
+            />
+            <span>
+              Desktop notifications
+              <span className="setup__pref-hint">
+                Off = the needs-attention panel still updates, just silently.
+              </span>
+            </span>
+          </label>
+          <label className="setup__pref">
+            <span>
+              Editor
+              <span className="setup__pref-hint">Where doc links and “Open” buttons go.</span>
+            </span>
+            <select
+              className="setup__pref-select"
+              value={preferences.editor}
+              onChange={(e) => applyPreferences({ editor: e.target.value as EditorId })}
+            >
+              {(Object.keys(EDITORS) as EditorId[]).map((id) => (
+                <option key={id} value={id}>
+                  {EDITORS[id].label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {prefsError && <p className="setup__error">{prefsError}</p>}
+        </div>
+      )}
 
       <div className="setup__footer">
         <span className="setup__meta">

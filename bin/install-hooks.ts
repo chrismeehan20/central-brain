@@ -69,6 +69,17 @@ function buildHookEntry(): HookEntry {
 }
 
 function main() {
+  // No ~/.claude means Claude Code has never run here. Creating the directory
+  // ourselves would leave a stray config for a tool the user doesn't have —
+  // a Codex-only user runs this from the README's setup block, so skip politely.
+  if (!fs.existsSync(path.dirname(SETTINGS_PATH))) {
+    console.log(
+      `No ${path.dirname(SETTINGS_PATH)} found — is Claude Code installed? ` +
+        "Skipping Claude Code hooks; run this again after your first Claude Code session."
+    );
+    return;
+  }
+
   const settings = readSettings();
   settings.hooks ??= {};
 

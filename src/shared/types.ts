@@ -198,7 +198,38 @@ export interface ApiKeyStatus {
   setupDismissed: boolean;
 }
 
+/**
+ * VS Code-family editors. Forks register their own URL scheme and app bundle,
+ * so one id drives all three editor touchpoints: `<scheme>://file/` doc links,
+ * `open -a <appName>`, and the `<scheme>://anthropic.claude-code/...` chat
+ * deep link (extension URI handlers inherit the fork's scheme).
+ */
+export type EditorId = "vscode" | "cursor" | "vscodium" | "windsurf";
+
+export const EDITORS: Record<EditorId, { label: string; scheme: string; appName: string }> = {
+  vscode: { label: "Visual Studio Code", scheme: "vscode", appName: "Visual Studio Code" },
+  cursor: { label: "Cursor", scheme: "cursor", appName: "Cursor" },
+  vscodium: { label: "VSCodium", scheme: "vscodium", appName: "VSCodium" },
+  windsurf: { label: "Windsurf", scheme: "windsurf", appName: "Windsurf" },
+};
+
+export const DEFAULT_EDITOR: EditorId = "vscode";
+
+/** User preferences editable from the settings panel. */
+export interface Preferences {
+  /** Fire desktop notifications for attention events. Off = the panel still updates, silently. */
+  notifications: boolean;
+  /** Which editor doc links and the open route target. */
+  editor: EditorId;
+}
+
+export const DEFAULT_PREFERENCES: Preferences = {
+  notifications: true,
+  editor: DEFAULT_EDITOR,
+};
+
 export interface SettingsResponse {
   apiKey: ApiKeyStatus;
   ai: { model: string; dailyCap: number; callsRemaining: number };
+  preferences: Preferences;
 }

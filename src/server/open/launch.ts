@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import { promisify } from "node:util";
-import type { AttentionItem, Project } from "@shared/types.js";
+import type { AttentionItem, EditorId, Project } from "@shared/types.js";
+import { DEFAULT_EDITOR, EDITORS } from "@shared/types.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -38,12 +39,17 @@ export function escapeAppleScript(s: string): string {
   return s.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 }
 
-export function buildVsCodeOpen(path: string): Cmd {
-  return { cmd: "open", args: ["-a", "Visual Studio Code", path] };
+export function buildVsCodeOpen(path: string, editor: EditorId = DEFAULT_EDITOR): Cmd {
+  return { cmd: "open", args: ["-a", EDITORS[editor].appName, path] };
 }
 
-export function buildChatDeepLink(sessionId: string): Cmd {
-  return { cmd: "open", args: [`vscode://anthropic.claude-code/open?session=${sessionId}`] };
+export function buildChatDeepLink(sessionId: string, editor: EditorId = DEFAULT_EDITOR): Cmd {
+  // VS Code forks route extension URI handlers through their own scheme, so
+  // the Claude Code deep link works in Cursor/VSCodium/Windsurf as cursor://…
+  return {
+    cmd: "open",
+    args: [`${EDITORS[editor].scheme}://anthropic.claude-code/open?session=${sessionId}`],
+  };
 }
 
 export function buildTerminalResume(cwd: string, sessionId: string): Cmd {
@@ -65,6 +71,8 @@ export interface ResolveDeps {
   now?: number;
   /** mtime in ms, or null when the file is gone. */
   statMtimeMs?: (path: string) => number | null;
+  /** Which VS Code-family editor to target. */
+  editor?: EditorId;
 }
 
 function defaultStatMtimeMs(path: string): number | null {
@@ -89,10 +97,10 @@ function err(status: number, message: string): OpenAction {
   return { error: { status, message } };
 }
 
-function vsCodeChat(projectPath: string, sessionId: string): OpenAction {
+function vsCodeChat(projectPath: string, sessionId: string, editor: EditorId): OpenAction {
   return {
     kind: "vscode-chat",
-    steps: [buildVsCodeOpen(projectPath), buildChatDeepLink(sessionId)],
+    steps: [buildVsCodeOpen(projectPath, editor), buildChatDeepLink(sessionId, editor)],
     delayMsBetween: CHAT_DEEP_LINK_DELAY_MS,
   };
 }
@@ -108,6 +116,7 @@ export function resolveOpenAction(
   body: unknown,
   deps: ResolveDeps = {}
 ): OpenAction {
+  const editor = deps.editor ?? DEFAULT_EDITOR;
   const { projectPath, sessionId } = (body ?? {}) as { projectPath?: unknown; sessionId?: unknown };
   if (!projectPath || typeof projectPath !== "string") {
     return err(400, "projectPath is required");
@@ -117,7 +126,7 @@ export function resolveOpenAction(
   if (project.missing) return err(409, "This folder no longer exists on disk.");
 
   if (sessionId === undefined) {
-    return { kind: "project", steps: [buildVsCodeOpen(project.path)] };
+    return { kind: "project", steps: [buildVsCodeOpen(project.path, editor)] };
   }
   if (typeof sessionId !== "string" || !SAFE_SESSION_ID.test(sessionId)) {
     return err(400, "sessionId is invalid");
@@ -128,7 +137,7 @@ export function resolveOpenAction(
   if (session.tool === "codex") {
     // No safe mechanism yet: the Codex extension has no session deep link, and
     // codex:// is Desktop-only and unstable. Revisit on openai/codex#21779.
-    return { kind: "project", steps: [buildVsCodeOpen(project.path)], note: CODEX_NOTE };
+    return { kind: "project", steps: [buildVsCodeOpen(project.path, editor)], note: CODEX_NOTE };
   }
 
   // A session waiting on the user is live by definition. Resuming a live
@@ -142,9 +151,9 @@ export function resolveOpenAction(
   const terminalSurface = session.entrypoint === "cli" || session.entrypoint === "claude-desktop";
   if (attentionActive) {
     if (terminalSurface) {
-      return { kind: "project", steps: [buildVsCodeOpen(project.path)] };
+      return { kind: "project", steps: [buildVsCodeOpen(project.path, editor)] };
     }
-    return vsCodeChat(project.path, sessionId);
+    return vsCodeChat(project.path, sessionId, editor);
   }
 
   if (!session.transcriptPath) return err(409, GONE_TRANSCRIPT);
@@ -159,7 +168,7 @@ export function resolveOpenAction(
   }
   // claude-vscode — or unknown entrypoint, where the extension is the right
   // default (it dominates real usage, and the failure mode is a fresh panel).
-  return vsCodeChat(project.path, sessionId);
+  return vsCodeChat(project.path, sessionId, editor);
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

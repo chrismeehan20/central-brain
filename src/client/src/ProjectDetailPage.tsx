@@ -9,6 +9,7 @@ import {
   updateDetailItem,
 } from "./api";
 import { relativeTime } from "./format";
+import { useDocHref } from "./prefs";
 
 interface Props {
   path: string;
@@ -54,6 +55,7 @@ function buildActivity(project?: Project): ActivityEntry[] {
 }
 
 export default function ProjectDetailPage({ path, project, onBack }: Props) {
+  const docHref = useDocHref();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -343,7 +345,7 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
                       {i > 0 && <span className="card__doc-sep">, </span>}
                       <a
                         className="card__doc"
-                        href={`vscode://file/${encodeURI(doc.file)}`}
+                        href={docHref(doc.file)}
                         title={doc.file}
                       >
                         {doc.relativePath}

@@ -1,12 +1,27 @@
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Manager};
 
-pub const SERVER_PORT: u16 = 4317;
+pub const DEFAULT_PORT: u16 = 4317;
+
+/// The port the server, the probe, and the popover all use. `CENTRAL_BRAIN_PORT`
+/// overrides the default — 4317 is also the OTLP gRPC default, so collisions are
+/// plausible on a dev machine. Read once: probe, spawn, and window URL must
+/// agree for the app's whole lifetime. Note a Finder-launched `.app` only sees
+/// this via `launchctl setenv`; from a shell, a plain env var works.
+pub fn server_port() -> u16 {
+    static PORT: OnceLock<u16> = OnceLock::new();
+    *PORT.get_or_init(|| {
+        std::env::var("CENTRAL_BRAIN_PORT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(DEFAULT_PORT)
+    })
+}
 
 /// How long to wait for a freshly spawned server to start listening before we
 /// give up and report a failure in the tray. Generous: the first scan reads
@@ -33,6 +48,21 @@ const NODE_CANDIDATES: &[&str] = &[
 #[cfg(not(target_os = "macos"))]
 const NODE_CANDIDATES: &[&str] = &["/usr/local/bin/node", "/usr/bin/node"];
 
+/// Version-manager layouts probed after the static candidates, as
+/// ($HOME-relative directory of per-version installs, path from a version
+/// directory to the node binary). nvm, fnm, asdf, and mise all install this
+/// way, entirely under $HOME where the static list can't see them — and they
+/// only reach PATH through shell init, which a Finder-launched `.app` never
+/// runs. The newest installed version wins; "the version some project's .nvmrc
+/// prefers" is unknowable from out here, and any modern node runs the server.
+const VERSION_MANAGER_LAYOUTS: &[(&str, &str)] = &[
+    (".nvm/versions/node", "bin/node"),
+    (".asdf/installs/nodejs", "bin/node"),
+    (".local/share/mise/installs/node", "bin/node"),
+    ("Library/Application Support/fnm/node-versions", "installation/bin/node"),
+    (".local/share/fnm/node-versions", "installation/bin/node"),
+];
+
 /// What happened when we tried to bring the server up. Held in Tauri state so
 /// the tray can report it instead of the popover silently rendering a blank
 /// webview — a status dashboard that cannot report its own status was one of the
@@ -50,9 +80,9 @@ pub struct Sidecar(pub Mutex<ServerState>);
 impl Sidecar {
     pub fn status_line(&self) -> String {
         match &*self.0.lock().unwrap() {
-            ServerState::Spawned(_) => format!("Server running on :{SERVER_PORT}"),
+            ServerState::Spawned(_) => format!("Server running on :{}", server_port()),
             ServerState::Attached => {
-                format!("Attached to a server already on :{SERVER_PORT}")
+                format!("Attached to a server already on :{}", server_port())
             }
             ServerState::Failed(why) => format!("Server not running — {why}"),
         }
@@ -74,17 +104,78 @@ impl Sidecar {
 
 /// True if something is accepting connections on the server port.
 pub fn server_is_up() -> bool {
-    let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, SERVER_PORT));
+    let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, server_port()));
     TcpStream::connect_timeout(&addr, PROBE_TIMEOUT).is_ok()
 }
 
+/// Picks the newest-versioned subdirectory of `dir` ("v22.5.1" and "22.5.1"
+/// both parse; non-numeric components count as 0). Newest because the only
+/// requirement is "a node recent enough to run the bundle", and the newest
+/// install is the best guess at what the user considers current.
+fn newest_version_dir(dir: &Path) -> Option<PathBuf> {
+    let entries = std::fs::read_dir(dir).ok()?;
+    let mut best: Option<(Vec<u64>, PathBuf)> = None;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = entry.file_name();
+        let key: Vec<u64> = name
+            .to_string_lossy()
+            .trim_start_matches('v')
+            .split('.')
+            .map(|part| {
+                part.chars()
+                    .take_while(char::is_ascii_digit)
+                    .collect::<String>()
+                    .parse()
+                    .unwrap_or(0)
+            })
+            .collect();
+        if best.as_ref().map_or(true, |(k, _)| key > *k) {
+            best = Some((key, path));
+        }
+    }
+    best.map(|(_, path)| path)
+}
+
 fn find_node() -> Option<PathBuf> {
+    // Explicit override first — the escape hatch for any layout not probed below.
+    if let Some(explicit) = std::env::var_os("CENTRAL_BRAIN_NODE") {
+        let path = PathBuf::from(explicit);
+        if path.is_file() {
+            return Some(path);
+        }
+        log::warn!(
+            "sidecar: CENTRAL_BRAIN_NODE is set but is not a file, ignoring: {}",
+            path.display()
+        );
+    }
+
     for candidate in NODE_CANDIDATES {
         let path = Path::new(candidate);
         if path.is_file() {
             return Some(path.to_path_buf());
         }
     }
+
+    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+        // Volta keeps a stable shim rather than per-version directories.
+        let volta = home.join(".volta/bin/node");
+        if volta.is_file() {
+            return Some(volta);
+        }
+        for (versions_dir, node_rel) in VERSION_MANAGER_LAYOUTS {
+            if let Some(version) = newest_version_dir(&home.join(versions_dir)) {
+                let node = version.join(node_rel);
+                if node.is_file() {
+                    return Some(node);
+                }
+            }
+        }
+    }
+
     // Last resort: a PATH lookup, which only helps when launched from a shell.
     let path_var = std::env::var_os("PATH")?;
     std::env::split_paths(&path_var)
@@ -116,13 +207,14 @@ fn resource(app: &AppHandle, relative: &str) -> Option<PathBuf> {
 /// does not fight over the port.
 pub fn start(app: &AppHandle) -> ServerState {
     if server_is_up() {
-        log::info!("sidecar: server already listening on :{SERVER_PORT}, attaching");
+        log::info!("sidecar: server already listening on :{}, attaching", server_port());
         return ServerState::Attached;
     }
 
     let Some(node) = find_node() else {
         let why = format!(
-            "no Node.js interpreter found (looked in {} and PATH)",
+            "no Node.js interpreter found (looked in {}, nvm/volta/fnm/asdf/mise installs, \
+             and PATH — set CENTRAL_BRAIN_NODE to your node binary to override)",
             NODE_CANDIDATES.join(", ")
         );
         log::error!("sidecar: {why}");
@@ -138,7 +230,7 @@ pub fn start(app: &AppHandle) -> ServerState {
     let mut cmd = Command::new(&node);
     cmd.arg(&bundle)
         .env("NODE_ENV", "production")
-        .env("PORT", SERVER_PORT.to_string())
+        .env("PORT", server_port().to_string())
         .env("CENTRAL_BRAIN_WATCH_PARENT", "1")
         // A pipe we never write to: while this process lives the pipe stays open, and
         // when it dies for ANY reason (quit, SIGTERM, SIGKILL, crash) the OS closes the

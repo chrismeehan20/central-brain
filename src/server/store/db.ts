@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { JSONFilePreset } from "lowdb/node";
 import { resolveDataDir } from "../appPaths.js";
-import type { Override, AttentionItem, GithubStatus, ProjectSummary, ProjectDetail, DailyDigest, SourceTool } from "@shared/types.js";
+import type { Override, AttentionItem, GithubStatus, ProjectSummary, ProjectDetail, DailyDigest, SourceTool, Preferences } from "@shared/types.js";
+import { DEFAULT_PREFERENCES, EDITORS } from "@shared/types.js";
 
 /** Exported so startup can log it — inside an app bundle this is the only clue to where the data went. */
 export const dataDir = resolveDataDir();
@@ -66,6 +67,8 @@ export interface SettingsData {
   apiKey: string;
   /** True once the user has saved a key or explicitly skipped setup, so first-run onboarding stops asking. */
   setupDismissed: boolean;
+  /** Absent in settings.json files written before preferences existed — read via getPreferences(). */
+  preferences?: Partial<Preferences>;
 }
 
 export const settingsPath = path.join(dataDir, "settings.json");
@@ -73,6 +76,26 @@ export const settingsDb = await JSONFilePreset<SettingsData>(settingsPath, {
   apiKey: "",
   setupDismissed: false,
 });
+
+/**
+ * Preferences with defaults merged in. lowdb only applies its defaults when the
+ * file is missing entirely, so a settings.json from before a preference existed
+ * simply lacks the field — every read has to fill the gaps.
+ */
+export function getPreferences(): Preferences {
+  const stored = settingsDb.data.preferences ?? {};
+  const editor = stored.editor && stored.editor in EDITORS ? stored.editor : DEFAULT_PREFERENCES.editor;
+  return {
+    notifications: stored.notifications ?? DEFAULT_PREFERENCES.notifications,
+    editor,
+  };
+}
+
+export async function updatePreferences(patch: Partial<Preferences>): Promise<Preferences> {
+  settingsDb.data.preferences = { ...getPreferences(), ...patch };
+  await writeSettings();
+  return getPreferences();
+}
 
 /**
  * Persist settings, then re-assert owner-only permissions.

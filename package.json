@@ -1,11 +1,16 @@
 {
   "name": "central-brain",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "Local mission-control dashboard for tracking many AI-agent-driven projects at once.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chrismeehan20/central-brain.git"
+  },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.5"
   },
   "scripts": {
     "dev": "concurrently -n server,client -c blue,green \"tsx watch src/server/index.ts\" \"vite\"",

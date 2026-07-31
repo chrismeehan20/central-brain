@@ -31,11 +31,27 @@ fn candidate_list_is_absolute_paths_only() {
 }
 
 #[test]
+fn newest_version_dir_picks_the_highest_version() {
+    // nvm-style layout: one directory per installed version. "9" would beat
+    // "22" under the lexicographic comparison this replaces.
+    let base = std::env::temp_dir().join(format!("cb-sidecar-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    for v in ["v9.9.9", "v20.11.1", "v22.5.1", "not-a-version"] {
+        std::fs::create_dir_all(base.join(v)).unwrap();
+    }
+    let newest = newest_version_dir(&base).expect("expected a version directory");
+    assert!(newest.ends_with("v22.5.1"), "picked {newest:?}");
+    let _ = std::fs::remove_dir_all(&base);
+
+    assert!(newest_version_dir(Path::new("/definitely/not/a/real/dir")).is_none());
+}
+
+#[test]
 fn server_probe_is_false_when_nothing_listens_and_true_when_something_does() {
     // Bind the real port so the probe has something to find. If the port is
     // already in use (a dev server is running), skip rather than fail — this
     // test is about the probe, not about the developer's environment.
-    match TcpListener::bind(("127.0.0.1", SERVER_PORT)) {
+    match TcpListener::bind(("127.0.0.1", server_port())) {
         Ok(listener) => {
             assert!(server_is_up(), "probe should see our listener");
             drop(listener);

@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { runScan, getCachedProjects, getLastScanAt } from "../scan/index.js";
 import { getAttentionItems } from "../alert/attention.js";
 import { launch, resolveOpenAction } from "../open/launch.js";
+import { getPreferences } from "../store/db.js";
+import { EDITORS } from "@shared/types.js";
 
 interface OpenBody {
   projectPath: string;
@@ -12,7 +14,8 @@ interface OpenBody {
 export async function openRoutes(app: FastifyInstance) {
   app.post<{ Body: OpenBody }>("/api/open", async (req, reply) => {
     if (!getLastScanAt()) runScan();
-    const action = resolveOpenAction(getCachedProjects(), getAttentionItems(), req.body);
+    const editor = getPreferences().editor;
+    const action = resolveOpenAction(getCachedProjects(), getAttentionItems(), req.body, { editor });
     if ("error" in action) {
       reply.code(action.error.status);
       return { error: action.error.message };
@@ -27,7 +30,7 @@ export async function openRoutes(app: FastifyInstance) {
         error:
           action.kind === "terminal-resume"
             ? "Couldn't open Terminal to resume the chat."
-            : "Couldn't launch Visual Studio Code — is it installed?",
+            : `Couldn't launch ${EDITORS[editor].label} — is it installed?`,
       };
     }
     return { ok: true, kind: action.kind, ...(action.note ? { note: action.note } : {}) };

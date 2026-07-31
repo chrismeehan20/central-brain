@@ -6,6 +6,7 @@ import type {
   DetailItemKind,
   DailyDigest,
   ApiKeyStatus,
+  Preferences,
   SettingsResponse,
   MissingProjectTriage,
 } from "@shared/types";
@@ -183,6 +184,19 @@ async function apiKeyRequest(
     throw new Error(err.error ?? `Request failed: ${res.status}`);
   }
   return (await res.json()).apiKey;
+}
+
+export async function updatePreferences(patch: Partial<Preferences>): Promise<Preferences> {
+  const res = await fetch("/api/settings/preferences", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? `Failed to save preferences: ${res.status}`);
+  }
+  return (await res.json()).preferences;
 }
 
 export function saveApiKey(apiKey: string): Promise<ApiKeyStatus> {

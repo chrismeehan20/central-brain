@@ -4,13 +4,14 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, RunEvent, WindowEvent,
 };
+use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_positioner::{Position, WindowExt};
 
-use sidecar::{Sidecar, SERVER_PORT};
+use sidecar::{server_port, Sidecar, DEFAULT_PORT};
 
 /// Records when the popover was last dismissed by losing focus. A click on the
 /// tray icon while the popover is open blurs (and hides) it *before* the tray
@@ -19,7 +20,7 @@ use sidecar::{Sidecar, SERVER_PORT};
 struct BlurGuard(Mutex<Instant>);
 
 fn dashboard_url() -> String {
-    format!("http://localhost:{SERVER_PORT}")
+    format!("http://localhost:{}", server_port())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -51,11 +52,28 @@ pub fn run() {
             app.manage(Sidecar(Mutex::new(state)));
             let sidecar = app.state::<Sidecar>();
 
+            // The window URL in tauri.conf.json is static; on a custom port the
+            // popover has to be pointed at the right server by hand.
+            if server_port() != DEFAULT_PORT {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.navigate(dashboard_url().parse()?);
+                }
+            }
+
             let status_i =
                 MenuItem::with_id(app, "status", sidecar.status_line(), false, None::<&str>)?;
             let open_i = MenuItem::with_id(app, "open", "Open in browser", true, None::<&str>)?;
+            let autostart_enabled = app.autolaunch().is_enabled().unwrap_or(false);
+            let autostart_i = CheckMenuItem::with_id(
+                app,
+                "autostart",
+                "Launch at login",
+                true,
+                autostart_enabled,
+                None::<&str>,
+            )?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit Central Brain", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&status_i, &open_i, &quit_i])?;
+            let menu = Menu::with_items(app, &[&status_i, &open_i, &autostart_i, &quit_i])?;
 
             // Surface an unhealthy server in the tooltip. Previously a dead
             // server just produced a blank popover with no explanation — a
@@ -77,12 +95,34 @@ pub fn run() {
                 .tooltip(tooltip)
                 .menu(&menu)
                 .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id.as_ref() {
+                .on_menu_event(move |app, event| match event.id.as_ref() {
                     "quit" => app.exit(0),
                     "open" => {
                         let _ = std::process::Command::new("open")
                             .arg(dashboard_url())
                             .spawn();
+                    }
+                    "autostart" => {
+                        // The plugin registers a Launch Agent pointing at the
+                        // installed .app bundle, not a path into a checkout —
+                        // repo moves can't strand it the way the old launchd
+                        // service was stranded.
+                        let autolaunch = app.autolaunch();
+                        let enabled = autolaunch.is_enabled().unwrap_or(false);
+                        let result = if enabled {
+                            autolaunch.disable()
+                        } else {
+                            autolaunch.enable()
+                        };
+                        match result {
+                            Ok(()) => {
+                                let _ = autostart_i.set_checked(!enabled);
+                            }
+                            Err(err) => {
+                                log::error!("autostart toggle failed: {err}");
+                                let _ = autostart_i.set_checked(enabled);
+                            }
+                        }
                     }
                     _ => {}
                 })

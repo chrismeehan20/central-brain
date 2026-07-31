@@ -1,9 +1,16 @@
 import type { FastifyInstance } from "fastify";
 import { apiKeyStatus, clearApiKey, dismissSetup, saveApiKey } from "../ai/apiKey.js";
 import { AI_MODEL, callsRemaining, dailyCap } from "../ai/budget.js";
+import { getPreferences, updatePreferences } from "../store/db.js";
+import { EDITORS } from "@shared/types.js";
 
 interface ApiKeyBody {
   apiKey?: string;
+}
+
+interface PreferencesBody {
+  notifications?: unknown;
+  editor?: unknown;
 }
 
 /**
@@ -19,7 +26,25 @@ export async function settingsRoutes(app: FastifyInstance) {
   app.get("/api/settings", async () => ({
     apiKey: apiKeyStatus(),
     ai: { model: AI_MODEL, dailyCap: dailyCap(), callsRemaining: callsRemaining() },
+    preferences: getPreferences(),
   }));
+
+  app.put<{ Body: PreferencesBody }>("/api/settings/preferences", async (req, reply) => {
+    const { notifications, editor } = req.body ?? {};
+    if (notifications !== undefined && typeof notifications !== "boolean") {
+      reply.code(400);
+      return { error: "notifications must be a boolean" };
+    }
+    if (editor !== undefined && (typeof editor !== "string" || !(editor in EDITORS))) {
+      reply.code(400);
+      return { error: `editor must be one of: ${Object.keys(EDITORS).join(", ")}` };
+    }
+    const preferences = await updatePreferences({
+      ...(notifications !== undefined ? { notifications } : {}),
+      ...(editor !== undefined ? { editor: editor as keyof typeof EDITORS } : {}),
+    });
+    return { preferences };
+  });
 
   app.put<{ Body: ApiKeyBody }>("/api/settings/api-key", async (req, reply) => {
     const apiKey = req.body?.apiKey;

@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import type { ApiKeyStatus, MissingProjectTriage, Project, SettingsResponse } from "@shared/types";
+import type {
+  ApiKeyStatus,
+  MissingProjectTriage,
+  Preferences,
+  Project,
+  SettingsResponse,
+} from "@shared/types";
+import { DEFAULT_PREFERENCES } from "@shared/types";
 import {
   fetchProjects,
   fetchRelocations,
@@ -8,6 +15,7 @@ import {
   triggerScan,
   updateOverride,
 } from "./api";
+import { PreferencesContext } from "./prefs";
 import ProjectGrid from "./ProjectGrid";
 import ProjectDetailPage from "./ProjectDetailPage";
 import AttentionPanel from "./AttentionPanel";
@@ -58,6 +66,10 @@ export default function App() {
   function handleApiKeyStatus(apiKey: ApiKeyStatus) {
     setSettings((prev) => (prev ? { ...prev, apiKey } : prev));
     loadSettings();
+  }
+
+  function handlePreferences(preferences: Preferences) {
+    setSettings((prev) => (prev ? { ...prev, preferences } : prev));
   }
 
   function load() {
@@ -161,15 +173,19 @@ export default function App() {
     );
   }
 
+  const preferences = settings?.preferences ?? DEFAULT_PREFERENCES;
+
   if (route) {
     return (
-      <ProjectDetailPage
-        path={route}
-        project={projects.find((p) => p.path === route)}
-        onBack={() => {
-          window.location.hash = "";
-        }}
-      />
+      <PreferencesContext.Provider value={preferences}>
+        <ProjectDetailPage
+          path={route}
+          project={projects.find((p) => p.path === route)}
+          onBack={() => {
+            window.location.hash = "";
+          }}
+        />
+      </PreferencesContext.Provider>
     );
   }
 
@@ -226,6 +242,7 @@ export default function App() {
   }
 
   return (
+    <PreferencesContext.Provider value={preferences}>
     <main className="shell">
       <header className="topbar">
         <div>
@@ -246,7 +263,7 @@ export default function App() {
           </button>
           <button
             onClick={() => setSettingsOpen((open) => !open)}
-            title="Anthropic API key"
+            title="Settings"
             aria-label="Settings"
           >
             ⚙
@@ -262,6 +279,7 @@ export default function App() {
             mode="settings"
             settings={settings}
             onStatusChange={handleApiKeyStatus}
+            onPreferencesChange={handlePreferences}
             onClose={() => setSettingsOpen(false)}
           />
         ) : (
@@ -306,5 +324,6 @@ export default function App() {
       )}
       <ProjectGrid title="Hidden" projects={hidden} collapsible {...gridProps} />
     </main>
+    </PreferencesContext.Provider>
   );
 }
