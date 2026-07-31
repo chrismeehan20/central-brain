@@ -5,8 +5,22 @@ import { summariesDb } from "../store/db.js";
 import { AI_MODEL, canSpend, capMessage, isDebounced, recordCall } from "./budget.js";
 import { getAnthropic } from "./client.js";
 import { readDocBodies } from "./docBodies.js";
+import { readCommitSubjects } from "./gitEvidence.js";
 
-function buildContext(project: Project): string {
+/**
+ * Evidence for the one-line summary, labelled by what each source actually
+ * proves.
+ *
+ * The labelling is the point. Docs describe plans and session summaries
+ * describe what a session was *about*, so on their own they cannot distinguish
+ * "still to do" from "shipped last week" — which is how a project whose commits
+ * clearly landed a feature still got summarised as needing to build it. Recent
+ * commits settle it, exactly as they already do for project detail.
+ *
+ * The commit list is part of the hash too, so a new commit regenerates the
+ * summary instead of leaving a contradicted one on the card.
+ */
+async function buildContext(project: Project): Promise<string> {
   const docs = project.markdown
     .slice(0, 5)
     .map((d) => `## ${d.relativePath}${d.firstHeading ? ` — ${d.firstHeading}` : ""}`)
@@ -18,11 +32,18 @@ function buildContext(project: Project): string {
   // Doc bodies are part of the context (and therefore the hash) so editing a
   // README/PLAN actually regenerates the summary — headings alone miss that.
   const bodies = readDocBodies(project, { budget: 3000, perDoc: 800 });
-  return (
-    `Project: ${project.displayName}\n\nMarkdown docs present:\n${docs || "(none)"}\n\n` +
-    `Recent session summaries:\n${recent || "(none)"}` +
-    (bodies ? `\n\nDoc contents (truncated):\n${bodies}` : "")
-  );
+  const shipped = await readCommitSubjects(project.path);
+  return [
+    `Project: ${project.displayName}`,
+    shipped
+      ? `ALREADY SHIPPED (recent commits — this work is DONE; never describe it as still needed):\n${shipped}`
+      : "ALREADY SHIPPED: (no git history)",
+    `PLANS AND NOTES — markdown docs present (may describe work already finished):\n${docs || "(none)"}`,
+    `RECENT SESSIONS — what was being worked on, not proof it finished:\n${recent || "(none)"}`,
+    bodies ? `Doc contents (truncated):\n${bodies}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function hashInput(text: string): string {
@@ -45,7 +66,7 @@ async function recordFailure(projectPath: string, cached: ProjectSummary | undef
  * a slow background schedule, not just on manual refresh.
  */
 export async function getOrGenerateSummary(project: Project, force = false): Promise<ProjectSummary | undefined> {
-  const context = buildContext(project);
+  const context = await buildContext(project);
   const hash = hashInput(context);
   const cached = summariesDb.data[project.path];
   if (!force && cached && cached.hash === hash) {
@@ -68,9 +89,12 @@ export async function getOrGenerateSummary(project: Project, force = false): Pro
         {
           role: "user",
           content:
-            "You're helping a developer track many side projects at once. Based on this project's docs and recent " +
-            "AI-coding-session summaries, write ONE short sentence (under 25 words) describing what's likely left " +
-            "to build or its current state. Be concrete, not generic — no preamble, just the sentence.\n\n" +
+            "You're helping a developer track many side projects at once. Write ONE short sentence (under 25 words) " +
+            "describing what's likely left to build, or the project's current state. Be concrete, not generic — no " +
+            "preamble, just the sentence.\n\n" +
+            "Weigh the evidence by what it proves: anything under ALREADY SHIPPED is finished, so never present it " +
+            "as outstanding. Plans and session topics are what was intended or discussed, which is not proof it " +
+            "shipped. If the docs and the commits disagree, trust the commits.\n\n" +
             context,
         },
       ],

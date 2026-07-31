@@ -10,7 +10,12 @@
   --claude: #f5b942;
   --codex: #4dd0e1;
   --danger: #f87171;
+  /* Three radii, by role rather than one value everywhere: panels, project
+     cards, and small controls should not all share a corner. */
   --radius: 10px;
+  --radius-card: 13px;
+  --radius-card-lg: 17px;
+  --radius-control: 6px;
 }
 
 * {
@@ -48,6 +53,9 @@ button {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  /* Adding the settings gear pushed this row past a phone's width. Wrapping
+     costs nothing on a wide window and stops the page scrolling sideways. */
+  flex-wrap: wrap;
 }
 
 .topbar__meta button {
@@ -71,7 +79,9 @@ button {
   font-family: inherit;
   font-size: 0.85rem;
   padding: 0.5rem 0.8rem;
-  width: 240px;
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 240px;
 }
 
 .topbar__search:focus {
@@ -270,12 +280,12 @@ h1 {
   font-size: 0.8rem;
 }
 
+/* A count, not a status — so it reads as a number beside the heading rather
+   than another pill competing with the cards below it. */
 .section__count {
-  background: var(--surface-raised);
-  border-radius: 5px;
-  padding: 0.05rem 0.5rem;
   font-size: 0.75rem;
-  color: var(--ink);
+  font-weight: 500;
+  color: var(--muted);
 }
 
 .section__empty {
@@ -286,17 +296,19 @@ h1 {
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 0.9rem;
+  /* Not a single `gap`: rows read as separate things and need more air than
+     columns, which the eye already separates by alignment. */
+  column-gap: 0.9rem;
+  row-gap: 1.5rem;
 }
 
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1rem;
+  border-radius: var(--radius-card);
+  padding: 0.9rem 1rem 0.85rem;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
   transition: border-color 0.15s ease;
 }
 
@@ -304,8 +316,37 @@ h1 {
   border-color: #3a4256;
 }
 
+/* Pinned projects are the ones being worked on, so they get real presence
+   rather than the same box as everything else — the rhythm follows meaning. */
 .card--pinned {
   border-color: var(--accent);
+  border-radius: var(--radius-card-lg);
+  padding: 1.15rem 1.25rem 1rem;
+}
+
+@media (min-width: 900px) {
+  .card--pinned {
+    grid-column: span 2;
+  }
+}
+
+/* Spacing rhythm inside a card: tight through the identifying metadata,
+   generous around the summary, which is the part actually worth reading. */
+.card__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+
+.card__meta + .card__docs,
+.card__flags + .card__meta {
+  margin-top: 0.3rem;
+}
+
+.card__header + .card__meta,
+.card__header + .card__flags {
+  margin-top: 0.45rem;
 }
 
 .card__header {
@@ -347,72 +388,22 @@ h1 {
   white-space: nowrap;
 }
 
-.card__badges {
-  display: flex;
-  gap: 0.4rem;
-}
-
-.badge {
+/* Flags are the ONLY pills on a card, and only for states worth interrupting
+   for. Everything else lives in .card__meta as text — when eight things all
+   shout, none of them is heard. */
+.flag {
   font-size: 0.7rem;
   font-weight: 600;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   padding: 0.15rem 0.5rem;
-}
-
-.badge--claude {
-  background: rgba(245, 185, 66, 0.15);
-  color: var(--claude);
-}
-
-.badge--codex {
-  background: rgba(77, 208, 225, 0.15);
-  color: var(--codex);
-}
-
-.badge--git {
-  background: var(--surface-raised);
-  color: var(--muted);
-  font-weight: 500;
-  font-family: "SF Mono", Menlo, monospace;
-}
-
-.badge--pr {
-  background: rgba(125, 211, 252, 0.15);
-  color: var(--accent);
-}
-
-.badge--ci {
-  background: var(--surface-raised);
-  color: var(--muted);
-}
-
-.badge--ci-success {
-  background: rgba(74, 222, 128, 0.15);
-  color: #4ade80;
-}
-
-.badge--ci-failure {
   background: rgba(248, 113, 113, 0.15);
   color: var(--danger);
 }
 
-.badge--missing {
-  background: rgba(248, 113, 113, 0.15);
-  color: var(--danger);
-}
-
-.badge--confidence-high {
-  background: rgba(74, 222, 128, 0.15);
-  color: #4ade80;
-}
-
-.badge--confidence-medium {
-  background: rgba(245, 185, 66, 0.15);
-  color: var(--claude);
-}
-
-.badge--confidence-low {
-  background: var(--surface-raised);
+/* The quiet channel: counts, branch, PRs, passing CI. */
+.card__meta {
+  margin: 0;
+  font-size: 0.75rem;
   color: var(--muted);
 }
 
@@ -446,7 +437,7 @@ h1 {
   gap: 0.4rem;
 }
 
-.relocate__header .badge {
+.relocate__header .relocate__confidence {
   white-space: nowrap;
 }
 
@@ -501,31 +492,42 @@ h1 {
 }
 
 .card__docs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-}
-
-.doc-chip {
+  margin: 0.3rem 0 0;
   font-size: 0.72rem;
+  line-height: 1.6;
+}
+
+/* Filenames set as a sentence of links, not a tag cloud. */
+.card__doc {
   color: var(--muted);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 0.15rem 0.5rem;
   text-decoration: none;
+  border-bottom: 1px solid transparent;
 }
 
-.doc-chip:hover {
+.card__doc:hover {
   color: var(--accent);
-  border-color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 
-.doc-chip--more {
-  cursor: pointer;
+/* Visible enough to actually separate two filenames — at --border it read as a
+   space and the paths ran together. */
+.card__doc-sep {
+  color: var(--muted);
+  opacity: 0.65;
+}
+
+.card__doc-more {
   font-family: inherit;
+  font-size: inherit;
   background: none;
-  border-style: dashed;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+.card__doc-more:hover {
+  color: var(--accent);
 }
 
 .card__summary {
@@ -534,6 +536,8 @@ h1 {
   gap: 0.5rem;
   font-size: 0.8rem;
   color: var(--ink);
+  /* The generous end of the rhythm — this is the sentence you came to read. */
+  margin-top: 0.85rem;
 }
 
 .card__summary p {
@@ -573,6 +577,7 @@ h1 {
   color: var(--muted);
   font-size: 0.7rem;
   font-family: "SF Mono", Menlo, monospace;
+  margin-top: 0.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -582,6 +587,7 @@ h1 {
   display: flex;
   gap: 0.4rem;
   margin-top: auto;
+  padding-top: 0.8rem;
 }
 
 .card__actions button {
@@ -682,6 +688,10 @@ h1 {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1rem;
+  /* A grid item's automatic minimum is its content, so an `fr` track is only a
+     ceiling, never a limit. Without this the activity log's nowrap lines grew
+     the track to ~3400px and pushed the whole page sideways. */
+  min-width: 0;
 }
 
 .detail-section__title {
@@ -870,6 +880,10 @@ h1 {
 
 .activity__text {
   flex: 1;
+  /* A flex item defaults to min-width:auto, so it refuses to shrink below its
+     content and the ellipsis never engages — the row just pushed the page
+     sideways instead. */
+  min-width: 0;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1070,4 +1084,70 @@ h1 {
 
 .setup__secondary:hover:not(:disabled) {
   color: var(--accent);
+}
+
+/* Relocation confidence: a word in colour, not another pill. Rare enough that
+   it never needed the weight of one. */
+.relocate__confidence {
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.relocate__confidence--high {
+  color: #4ade80;
+}
+
+.relocate__confidence--medium {
+  color: var(--claude);
+}
+
+.relocate__confidence--low {
+  color: var(--muted);
+}
+
+/* Detail page: branch and activity labels as text, matching the cards. */
+.detail__branch {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.activity__label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  min-width: 4.2rem;
+}
+
+.activity__label--commit {
+  color: var(--ink);
+}
+
+.activity__label--claude {
+  color: var(--claude);
+}
+
+.activity__label--codex {
+  color: var(--codex);
+}
+
+/* ---- Quality floor ---------------------------------------------------- */
+
+/* Keyboard focus has to be visible. The dashboard is keyboard-driven for
+   rename/pin/hide, and none of those had a focus ring. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
