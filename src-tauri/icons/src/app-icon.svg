@@ -1,20 +1,26 @@
 <!--
-  App icon (Finder, DMG, notifications): the same converging-signals mark as the
+  App icon (Finder, DMG, notifications): the same stacked-slab mark as the
   menubar, in the dashboard's own palette, so the two read as one product.
 
   Colours are the app's real tokens, not decoration: bg #0b0e14 behind
   accent #7dd3fc, the same pairing the dashboard uses for surface and accent.
+
+  The mark itself is copied verbatim from tray-template.svg — same 22-unit
+  coordinates, same stroke width — and scaled into place by the transform
+  below. Keeping one coordinate space means the two files stay identical in
+  shape; edit the geometry in tray-template.svg and paste it here unchanged.
+
+  scale(14.4) puts the 22-unit mark on a 316.8px square, and translate centres
+  that inside the 512 canvas: (512 - 316.8) / 2 = 97.6.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <rect width="512" height="512" rx="114" ry="114" fill="#0b0e14" />
   <rect x="8" y="8" width="496" height="496" rx="110" ry="110" fill="none" stroke="#262c3a" stroke-width="6" />
-  <g fill="none" stroke="#7dd3fc" stroke-width="30" stroke-linecap="round">
-    <path d="M395 256 H455" />
-    <path d="M326 137 L356 85" />
-    <path d="M186 137 L156 85" />
-    <path d="M117 256 H57" />
-    <path d="M186 375 L156 427" />
-    <path d="M326 375 L356 427" />
+  <g transform="translate(97.6 97.6) scale(14.4)">
+    <g fill="none" stroke="#7dd3fc" stroke-width="1.85" stroke-linejoin="round">
+      <rect x="6.2" y="2.5" width="9.6" height="3.4" rx="1.7" />
+      <rect x="4.4" y="8.65" width="13.2" height="3.9" rx="1.95" />
+    </g>
+    <rect x="2.5" y="14.4" width="17" height="5.6" rx="2.4" fill="#7dd3fc" />
   </g>
-  <circle cx="256" cy="256" r="74" fill="#7dd3fc" />
 </svg>

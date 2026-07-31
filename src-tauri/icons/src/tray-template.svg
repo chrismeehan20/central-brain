@@ -1,23 +1,28 @@
 <!--
-  Menubar (tray) mark: six signals converging on one core.
+  Menubar (tray) mark: three slabs stacked into one solid base.
 
   Drawn from what the app actually is — many agent sessions across many
-  projects, reporting into one place. Deliberately not the stock Tauri logo,
-  which shipped as this app's identity until now.
+  projects, accumulating into one place you check. The base is filled because
+  it is the thing you open; the two above it are outlines because they are
+  what fed into it.
+
+  Replaces a six-spoke-and-core mark, which was the universal brightness
+  glyph: signals radiating *outward* from the centre, the opposite of what
+  this app does. This shape has no radial symmetry to be misread.
 
   macOS template image rules: pure black plus alpha, no colour. The system
   inverts it for dark menubars and dims it when the menubar is inactive, which
-  is why the full-colour app icon looked wrong up here. Kept to six spokes and
-  a fat core because anything finer turns to mush at 22px.
+  is why a full-colour app icon looks wrong up here.
+
+  Geometry is authored in this 22-unit space and reused verbatim by
+  app-icon.svg via a transform, so the two marks cannot drift apart. The gaps
+  between slabs are sized against the stroke width (0.9 units of clear air
+  after the 1.85 stroke) because anything tighter fills in at 22px.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22">
-  <g fill="none" stroke="#000" stroke-width="2.1" stroke-linecap="round">
-    <path d="M17 11 H20.2" />
-    <path d="M14 5.8 L15.6 3.03" />
-    <path d="M8 5.8 L6.4 3.03" />
-    <path d="M5 11 H1.8" />
-    <path d="M8 16.2 L6.4 18.97" />
-    <path d="M14 16.2 L15.6 18.97" />
+  <g fill="none" stroke="#000" stroke-width="1.85" stroke-linejoin="round">
+    <rect x="6.2" y="2.5" width="9.6" height="3.4" rx="1.7" />
+    <rect x="4.4" y="8.65" width="13.2" height="3.9" rx="1.95" />
   </g>
-  <circle cx="11" cy="11" r="3.2" fill="#000" />
+  <rect x="2.5" y="14.4" width="17" height="5.6" rx="2.4" fill="#000" />
 </svg>
