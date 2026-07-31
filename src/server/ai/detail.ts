@@ -1,13 +1,12 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { DetailItem, DetailItemKind, Project, ProjectDetail } from "@shared/types.js";
 import { detailsDb } from "../store/db.js";
 import { AI_MODEL, canSpend, capMessage, isDebounced, recordCall } from "./budget.js";
 import { getAnthropic } from "./client.js";
 import { readDocBodies } from "./docBodies.js";
+import { git, readGitLog } from "./gitEvidence.js";
 import { getGithubStatus } from "../poll/githubPoller.js";
 import { bus } from "../events/bus.js";
 const KINDS: DetailItemKind[] = ["todo", "decision", "pending"];
@@ -68,27 +67,6 @@ export function getCachedDetail(projectPath: string): ProjectDetail | undefined 
 // ---- Evidence the AI reasons over (planning-doc bodies + recent sessions + last commit) ----
 
 const COLD_START_SESSIONS = 6;
-const execFileAsync = promisify(execFile);
-
-async function git(projectPath: string, args: string[]): Promise<string> {
-  try {
-    const { stdout } = await execFileAsync("git", ["-C", projectPath, ...args], {
-      encoding: "utf8",
-      timeout: 3000,
-    });
-    return stdout.trim();
-  } catch {
-    return ""; // not a git repo, or git unavailable
-  }
-}
-
-/** Recent commit messages (subject + body) — the strongest signal for what's
- *  ALREADY built. Body is included so completions described there (not just in
- *  the one-line subject) are detectable. */
-function readGitLog(projectPath: string): Promise<string> {
-  return git(projectPath, ["log", "--pretty=format:%s%n%b%n-----", "-n", "15"]);
-}
-
 /**
  * The working-tree source files (tracked + untracked-not-ignored). This is the
  * decisive "what exists" signal: if a feature has a module here, it's BUILT —
