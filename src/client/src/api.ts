@@ -61,6 +61,19 @@ export async function relocateProject(
   return res.json();
 }
 
+/** Open/focus VS Code at a project the server already knows about. */
+export async function openInVsCode(projectPath: string): Promise<void> {
+  const res = await fetch("/api/open", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectPath }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Failed to open: ${res.status}`);
+  }
+}
+
 export async function fetchDigest(): Promise<{ digest: DailyDigest | null }> {
   const res = await fetch("/api/digest");
   if (!res.ok) throw new Error(`Failed to load digest: ${res.status}`);

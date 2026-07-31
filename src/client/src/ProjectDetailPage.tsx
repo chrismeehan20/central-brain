@@ -3,6 +3,7 @@ import type { DetailItem, DetailItemKind, Project, ProjectDetail } from "@shared
 import {
   addDetailItem,
   fetchProjectDetail,
+  openInVsCode,
   refreshProjectDetail,
   saveDetailNotes,
   updateDetailItem,
@@ -25,6 +26,8 @@ interface ActivityEntry {
   at?: string;
   label: string;
   text: string;
+  /** Present on chat rows only — marks them clickable and keeps future resume options open. */
+  sessionId?: string;
 }
 
 function buildActivity(project?: Project): ActivityEntry[] {
@@ -33,6 +36,7 @@ function buildActivity(project?: Project): ActivityEntry[] {
     at: s.lastActivity,
     label: s.tool,
     text: s.summary ?? s.firstPrompt ?? "(session)",
+    sessionId: s.sessionId,
   }));
   const gh = project.github;
   if (gh?.lastCommitMessage) {
@@ -91,6 +95,11 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
     promise.then(setDetail).catch((err) => setError(String((err as Error).message ?? err)));
   }
 
+  function handleOpen() {
+    setError(null);
+    openInVsCode(path).catch((err) => setError(String((err as Error).message ?? err)));
+  }
+
   async function handleRefresh() {
     setRefreshing(true);
     setError(null);
@@ -131,9 +140,13 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
       <header className="detail__header">
         <div>
           <h1>{title}</h1>
-          <p className="card__path" title={path}>
+          <button
+            className="card__path card__path--open"
+            title="Open this folder in VS Code"
+            onClick={handleOpen}
+          >
             {path}
-          </p>
+          </button>
         </div>
         <div className="detail__meta">
           {project?.github?.branch && (
@@ -143,6 +156,9 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
             </span>
           )}
           <span className="scan-time">active {relativeTime(project?.lastActivity)}</span>
+          <button onClick={handleOpen} title="Open this folder in VS Code">
+            Open in VS Code
+          </button>
           <button onClick={handleRefresh} disabled={refreshing}>
             {refreshing ? "Refreshing…" : "Refresh detail"}
           </button>
@@ -241,7 +257,18 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
                   {activity.map((a, i) => (
                     <li key={i} className="activity__row">
                       <span className={`activity__label activity__label--${a.label}`}>{a.label}</span>
-                      <span className="activity__text">{a.text}</span>
+                      {a.sessionId ? (
+                        <button
+                          className="activity__text activity__text--open"
+                          title="Open this project in VS Code"
+                          onClick={handleOpen}
+                        >
+                          <span className="activity__open-text">{a.text}</span>
+                          <span className="activity__open-glyph">↗</span>
+                        </button>
+                      ) : (
+                        <span className="activity__text">{a.text}</span>
+                      )}
                       <span className="activity__age">{relativeTime(a.at)}</span>
                     </li>
                   ))}
