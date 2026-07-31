@@ -6,6 +6,7 @@ import type {
   DetailItemKind,
   DailyDigest,
   ApiKeyStatus,
+  HooksSetupStatus,
   Preferences,
   SettingsResponse,
   MissingProjectTriage,
@@ -184,6 +185,31 @@ async function apiKeyRequest(
     throw new Error(err.error ?? `Request failed: ${res.status}`);
   }
   return (await res.json()).apiKey;
+}
+
+export async function fetchHooksStatus(): Promise<HooksSetupStatus> {
+  const res = await fetch("/api/hooks/status");
+  if (!res.ok) throw new Error(`Failed to load hook status: ${res.status}`);
+  return res.json();
+}
+
+/** Install our hook entries into the tool's config. Errors carry the server's explanation verbatim. */
+export async function installHooks(tool: "claude" | "codex"): Promise<HooksSetupStatus> {
+  const res = await fetch("/api/hooks/install", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tool }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Failed to install hooks: ${res.status}`);
+  return body.status;
+}
+
+export async function dismissHooksSetup(): Promise<HooksSetupStatus> {
+  const res = await fetch("/api/hooks/dismiss-setup", { method: "POST" });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Request failed: ${res.status}`);
+  return body.status;
 }
 
 export async function updatePreferences(patch: Partial<Preferences>): Promise<Preferences> {

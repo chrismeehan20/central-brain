@@ -67,6 +67,8 @@ export interface SettingsData {
   apiKey: string;
   /** True once the user has saved a key or explicitly skipped setup, so first-run onboarding stops asking. */
   setupDismissed: boolean;
+  /** True once the user has dismissed the connect-your-tools card. Absent in older files. */
+  hooksSetupDismissed?: boolean;
   /** Absent in settings.json files written before preferences existed — read via getPreferences(). */
   preferences?: Partial<Preferences>;
 }

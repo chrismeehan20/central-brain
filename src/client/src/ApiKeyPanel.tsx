@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ApiKeyStatus, EditorId, Preferences, SettingsResponse } from "@shared/types";
 import { EDITORS } from "@shared/types";
 import { clearApiKey, dismissApiKeySetup, saveApiKey, updatePreferences } from "./api";
+import HooksPanel from "./HooksPanel";
 
 /**
  * Anthropic API key setup, in two guises.
@@ -135,6 +136,8 @@ export default function ApiKeyPanel({ mode, settings, onStatusChange, onPreferen
 
       {error && <p className="setup__error">{error}</p>}
       {saved && !error && <p className="setup__ok">Key verified and saved. AI features are on.</p>}
+
+      {mode === "settings" && <HooksPanel mode="settings" />}
 
       {/* Preferences live behind the gear only — onboarding stays a single ask. */}
       {mode === "settings" && (

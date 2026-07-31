@@ -1197,6 +1197,44 @@ button.activity__text--open:hover {
   color: var(--accent);
 }
 
+.hooks--settings {
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border);
+}
+
+.hooks__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.hooks__row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.25rem 0;
+  font-size: 0.8rem;
+}
+
+.hooks__tool {
+  flex-shrink: 0;
+  min-width: 6.5rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.hooks__state {
+  flex: 1;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.hooks__state--live {
+  color: var(--accent);
+}
+
 .setup__prefs {
   display: flex;
   flex-direction: column;

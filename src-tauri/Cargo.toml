@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "1.1.0"
+version = "1.2.0"
 description = "Menubar app for Central Brain — a local mission-control dashboard for AI-agent-driven projects"
 authors = ["Chris Meehan"]
 license = "MIT"
@@ -25,3 +25,4 @@ tauri = { version = "2.11.3", features = ["tray-icon", "image-png"] }
 tauri-plugin-log = "2"
 tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
 tauri-plugin-autostart = "2"
+tauri-plugin-updater = "2"

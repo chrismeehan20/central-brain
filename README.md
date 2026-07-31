@@ -52,36 +52,41 @@ dashboard, but that path is neither packaged nor supported.)
 
 ## Install
 
-**Prerequisites:** macOS with [Node.js](https://nodejs.org) ≥ 22.5 (any
-install method — Homebrew, nvm, volta, fnm, asdf, and mise are all found
-automatically). Optional: the [`gh` CLI](https://cli.github.com) for GitHub
-status, `terminal-notifier` for nicer notifications.
+**Prerequisites:** an Apple Silicon Mac with [Node.js](https://nodejs.org)
+≥ 22.5 (any install method — Homebrew, nvm, volta, fnm, asdf, and mise are
+all found automatically). Optional: the [`gh` CLI](https://cli.github.com)
+for GitHub status, `terminal-notifier` for nicer notifications.
 
-1. Download the `.dmg` (or `.app` zip) from the
-   [latest release](https://github.com/chrismeehan20/central-brain/releases)
-   and drag **Central Brain.app** to `/Applications`.
-2. The app is not code-signed, so macOS will quarantine it on first launch.
-   Clear that once:
+**Either** install with Homebrew:
 
-   ```bash
-   xattr -dc "/Applications/Central Brain.app"
-   ```
+```bash
+brew install --cask chrismeehan20/tap/central-brain
+```
 
-   (or launch it, then approve it under **System Settings → Privacy &
-   Security → Open Anyway**.)
-3. Launch it and install the hooks that push "agent is waiting on you" events
-   (each installer skips politely if you don't use that tool):
+**or** download the `.dmg` from the
+[latest release](https://github.com/chrismeehan20/central-brain/releases) and
+drag **Central Brain.app** to `/Applications`.
 
-   ```bash
-   git clone https://github.com/chrismeehan20/central-brain.git && cd central-brain
-   npm install
-   npm run install-hooks        # wires Claude Code hook events into ~/.claude/settings.json
-   npm run install-codex-hooks  # wires Codex hook events into $CODEX_HOME/hooks.json
-   ```
+The app is not Apple-notarized yet, so macOS quarantines it on first launch.
+Clear that once:
 
-The app runs the server itself — there is no separate service to install and
-nothing to start by hand. Without the hooks everything still works except the
-push alerts; sessions are discovered by scanning either way.
+```bash
+xattr -dc "/Applications/Central Brain.app"
+```
+
+(or launch it, then approve it under **System Settings → Privacy & Security →
+Open Anyway**.)
+
+That's the whole install. Launch it: the app runs the server itself — no
+separate service, nothing to start by hand — and the dashboard's first-run
+card wires the "agent is waiting on you" hooks into Claude Code and Codex with
+one click each (append-only, with a backup; the same rows live in ⚙ Settings
+forever after). Without the hooks everything still works except the push
+alerts; sessions are discovered by scanning either way.
+
+**Updates:** the app checks GitHub Releases on launch. When one is out, the
+tray menu shows "Install update vX.Y.Z…" — installing is always your click,
+and the download is verified against a signing key baked into the app.
 
 ### Building from source instead
 

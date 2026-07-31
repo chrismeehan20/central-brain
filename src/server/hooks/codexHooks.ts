@@ -99,6 +99,29 @@ function groupContainsOurs(group: CodexHookGroup): boolean {
 
 export class CodexHooksConfigError extends Error {}
 
+/** True when every event we care about already has one of our entries. */
+export function codexHooksInstalled(hooksPath: string, events: readonly string[] = CODEX_HOOK_EVENTS): boolean {
+  let config: CodexHooksConfig;
+  try {
+    config = readCodexHooksConfig(hooksPath);
+  } catch {
+    return false; // unparseable file = not installed; install surfaces the real error
+  }
+  if (!config.hooks) return false;
+  return events.every((event) => (config.hooks?.[event] ?? []).some(groupContainsOurs));
+}
+
+/**
+ * Whether Codex's one-off interactive trust approval has ever been granted on
+ * this machine. `hooks.state` existing doesn't prove the CURRENT config is the
+ * trusted one (trust is keyed to a hash of the whole file), but its absence
+ * proves hooks have never fired — the distinction the UI needs to say
+ * "approve inside Codex" vs "waiting for the first event".
+ */
+export function codexApprovalStateExists(hooksPath: string): boolean {
+  return fs.existsSync(path.join(path.dirname(hooksPath), "hooks.state"));
+}
+
 /**
  * Read and validate the config. Anything we can't confidently understand is an
  * error, not something to overwrite: this file may hold handlers we didn't

@@ -21,6 +21,7 @@ import ProjectDetailPage from "./ProjectDetailPage";
 import AttentionPanel from "./AttentionPanel";
 import ApiKeyPanel from "./ApiKeyPanel";
 import DigestPanel from "./DigestPanel";
+import HooksPanel from "./HooksPanel";
 import { relativeTime } from "./format";
 
 const DETAIL_PREFIX = "#/project/";
@@ -287,6 +288,11 @@ export default function App() {
             <ApiKeyPanel mode="onboarding" settings={settings} onStatusChange={handleApiKeyStatus} />
           )
         ))}
+
+      {/* Self-hiding: renders only while a detected tool still needs its hooks
+          installed or approved, and never alongside the settings panel, which
+          embeds the same rows. */}
+      {!settingsOpen && <HooksPanel mode="onboarding" />}
 
       <AttentionPanel />
       <DigestPanel />

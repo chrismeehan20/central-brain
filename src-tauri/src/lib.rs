@@ -6,10 +6,11 @@ use std::time::{Duration, Instant};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, RunEvent, WindowEvent,
+    AppHandle, Manager, RunEvent, WindowEvent, Wry,
 };
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_positioner::{Position, WindowExt};
+use tauri_plugin_updater::UpdaterExt;
 
 use sidecar::{server_port, Sidecar, DEFAULT_PORT};
 
@@ -23,10 +24,68 @@ fn dashboard_url() -> String {
     format!("http://localhost:{}", server_port())
 }
 
+/// Self-update from GitHub Releases (latest.json + tauri-signed .app.tar.gz).
+///
+/// Two modes share this function. On launch (`install = false`) it only looks:
+/// an available update turns the menu item into "Install update vX.Y.Z…" and
+/// nothing happens until the user clicks it — auto-replacing the app under
+/// someone mid-thought is not this app's style. On click (`install = true`) it
+/// downloads, verifies against the baked-in pubkey, swaps the .app, and
+/// restarts. Every failure lands in the menu item text, because a menubar app
+/// has no other honest place to report it.
+fn spawn_update_check(app: AppHandle, item: MenuItem<Wry>, install: bool) {
+    tauri::async_runtime::spawn(async move {
+        let updater = match app.updater() {
+            Ok(u) => u,
+            Err(err) => {
+                log::warn!("updater unavailable: {err}");
+                let _ = item.set_text("Updates unavailable");
+                return;
+            }
+        };
+        if install {
+            let _ = item.set_text("Checking for updates…");
+        }
+        match updater.check().await {
+            Ok(Some(update)) => {
+                if !install {
+                    let _ = item.set_text(format!("Install update v{}…", update.version));
+                    return;
+                }
+                let _ = item.set_text(format!("Installing v{}…", update.version));
+                match update.download_and_install(|_, _| {}, || {}).await {
+                    Ok(()) => {
+                        log::info!("update v{} installed, restarting", update.version);
+                        app.restart();
+                    }
+                    Err(err) => {
+                        log::error!("update install failed: {err}");
+                        let _ = item.set_text("Update failed — try again later");
+                    }
+                }
+            }
+            Ok(None) => {
+                if install {
+                    let _ = item.set_text(format!("Up to date (v{})", app.package_info().version));
+                }
+            }
+            Err(err) => {
+                // Expected before the first updater-enabled release exists, and
+                // whenever the machine is offline — quiet unless the user asked.
+                log::warn!("update check failed: {err}");
+                if install {
+                    let _ = item.set_text("Update check failed — offline?");
+                }
+            }
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_positioner::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -72,8 +131,15 @@ pub fn run() {
                 autostart_enabled,
                 None::<&str>,
             )?;
+            let update_i =
+                MenuItem::with_id(app, "update", "Check for Updates…", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit Central Brain", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&status_i, &open_i, &autostart_i, &quit_i])?;
+            let menu =
+                Menu::with_items(app, &[&status_i, &open_i, &autostart_i, &update_i, &quit_i])?;
+
+            // A silent look at launch: if a release is out, the menu item says
+            // so, and installing stays the user's click to make.
+            spawn_update_check(app.handle().clone(), update_i.clone(), false);
 
             // Surface an unhealthy server in the tooltip. Previously a dead
             // server just produced a blank popover with no explanation — a
@@ -101,6 +167,9 @@ pub fn run() {
                         let _ = std::process::Command::new("open")
                             .arg(dashboard_url())
                             .spawn();
+                    }
+                    "update" => {
+                        spawn_update_check(app.clone(), update_i.clone(), true);
                     }
                     "autostart" => {
                         // The plugin registers a Launch Agent pointing at the

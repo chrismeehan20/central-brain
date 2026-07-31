@@ -42,9 +42,15 @@ jobs:
       - run: npm test
 
       # npm run build (vite + tsc + server bundle) runs inside menubar:build.
+      # The TAURI_SIGNING_* secrets sign the UPDATER artifacts (.app.tar.gz +
+      # .sig, verified by the pubkey baked into tauri.conf.json) — this is
+      # Tauri's own key, not Apple code signing.
       - run: npm run menubar:build
-        # To sign and notarize, provision these repo secrets and uncomment:
-        # env:
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        # To also sign and notarize with Apple, provision these repo secrets
+        # and uncomment:
         #   APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
         #   APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         #   APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -53,16 +59,40 @@ jobs:
         #   APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       # ditto preserves the resource forks/xattrs a plain zip would strip.
-      - name: Zip the .app
+      # Space-free artifact names, because gh mangles spaces into dots on upload.
+      - name: Package artifacts
         run: |
           cd "src-tauri/target/release/bundle/macos"
           ditto -c -k --keepParent "Central Brain.app" "Central-Brain-macOS.app.zip"
+          mv "Central Brain.app.tar.gz" "Central-Brain-macOS.app.tar.gz"
+          mv "Central Brain.app.tar.gz.sig" "Central-Brain-macOS.app.tar.gz.sig"
+
+      # The updater manifest the installed apps poll (tauri.conf.json points at
+      # releases/latest/download/latest.json). Version comes from the tag.
+      - name: Build latest.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          SIGNATURE=$(cat "src-tauri/target/release/bundle/macos/Central-Brain-macOS.app.tar.gz.sig")
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          node -e '
+            const [version, signature, pubDate, tag] = process.argv.slice(1);
+            const url = `https://github.com/chrismeehan20/central-brain/releases/download/${tag}/Central-Brain-macOS.app.tar.gz`;
+            const manifest = {
+              version,
+              pub_date: pubDate,
+              platforms: { "darwin-aarch64": { signature, url } },
+            };
+            require("fs").writeFileSync("latest.json", JSON.stringify(manifest, null, 2) + "\n");
+          ' "$VERSION" "$SIGNATURE" "$PUB_DATE" "$GITHUB_REF_NAME"
+          cat latest.json
 
       - uses: actions/upload-artifact@v4
         with:
           name: central-brain-macos
           path: |
             src-tauri/target/release/bundle/macos/Central-Brain-macOS.app.zip
+            src-tauri/target/release/bundle/macos/Central-Brain-macOS.app.tar.gz
             src-tauri/target/release/bundle/dmg/*.dmg
 
       - name: Create GitHub Release
@@ -74,4 +104,6 @@ jobs:
             --title "Central Brain ${GITHUB_REF_NAME}" \
             --generate-notes \
             "src-tauri/target/release/bundle/macos/Central-Brain-macOS.app.zip" \
+            "src-tauri/target/release/bundle/macos/Central-Brain-macOS.app.tar.gz" \
+            latest.json \
             src-tauri/target/release/bundle/dmg/*.dmg

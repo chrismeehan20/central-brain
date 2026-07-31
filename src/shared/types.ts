@@ -233,3 +233,23 @@ export interface SettingsResponse {
   ai: { model: string; dailyCap: number; callsRemaining: number };
   preferences: Preferences;
 }
+
+/**
+ * State of the dashboard-driven hook install, per tool. `dirExists` is "is the
+ * tool even on this machine"; `installed` is "are our entries in its config";
+ * `live` is "have real events actually arrived recently" — the only proof the
+ * pipeline works end to end.
+ */
+export interface HookToolStatus {
+  dirExists: boolean;
+  installed: boolean;
+  live: boolean;
+  lastEventAt?: string;
+}
+
+export interface HooksSetupStatus {
+  claude: HookToolStatus;
+  /** Codex adds the interactive trust-approval step; hooks.state existing is its footprint. */
+  codex: HookToolStatus & { approvalStateExists: boolean };
+  setupDismissed: boolean;
+}
