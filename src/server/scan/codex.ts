@@ -207,7 +207,8 @@ export function scanCodexProjects(
       sessionId: meta.id,
       lastActivity: stat.mtime.toISOString(),
       summary: threadNames.get(meta.id),
-      entrypoint: meta.source,
+      // Subagent rollouts carry a thread_spawn JSON object here, not a string.
+      entrypoint: typeof meta.source === "string" ? meta.source : undefined,
       transcriptPath: file,
     };
     (result[key] ??= []).push(ref);

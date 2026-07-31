@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { DetailItem, DetailItemKind, Project, ProjectDetail } from "@shared/types";
+import type { DetailItem, DetailItemKind, Project, ProjectDetail, SourceTool } from "@shared/types";
 import {
   addDetailItem,
   fetchProjectDetail,
@@ -26,8 +26,11 @@ interface ActivityEntry {
   at?: string;
   label: string;
   text: string;
-  /** Present on chat rows only — marks them clickable and keeps future resume options open. */
+  /** Present on chat rows only — marks them clickable. */
   sessionId?: string;
+  tool?: SourceTool;
+  entrypoint?: string;
+  hasTranscript?: boolean;
 }
 
 function buildActivity(project?: Project): ActivityEntry[] {
@@ -37,6 +40,9 @@ function buildActivity(project?: Project): ActivityEntry[] {
     label: s.tool,
     text: s.summary ?? s.firstPrompt ?? "(session)",
     sessionId: s.sessionId,
+    tool: s.tool,
+    entrypoint: s.entrypoint,
+    hasTranscript: Boolean(s.transcriptPath),
   }));
   const gh = project.github;
   if (gh?.lastCommitMessage) {
@@ -56,6 +62,7 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
   const [showCompleted, setShowCompleted] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
   const [notesSaved, setNotesSaved] = useState(true);
+  const [openNote, setOpenNote] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -98,6 +105,33 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
   function handleOpen() {
     setError(null);
     openInVsCode(path).catch((err) => setError(String((err as Error).message ?? err)));
+  }
+
+  /** What clicking this chat row will actually do — the hover title must not lie. */
+  function chatAction(a: ActivityEntry): { title: string; sessionId?: string } {
+    if (a.tool === "codex") {
+      return {
+        title:
+          "Opens the project in VS Code — reopening a specific Codex chat isn't supported by the extension yet",
+        sessionId: a.sessionId,
+      };
+    }
+    if (!a.hasTranscript) {
+      // Transcript auto-cleaned: the chat itself is gone, only the project can open.
+      return { title: "Open this project in VS Code" };
+    }
+    if (a.entrypoint === "cli" || a.entrypoint === "claude-desktop") {
+      return { title: "Resume this chat in Terminal", sessionId: a.sessionId };
+    }
+    return { title: "Reopen this chat in Claude Code in VS Code", sessionId: a.sessionId };
+  }
+
+  function handleOpenChat(a: ActivityEntry) {
+    setError(null);
+    setOpenNote(null);
+    openInVsCode(path, chatAction(a).sessionId)
+      .then(({ note }) => note && setOpenNote(note))
+      .catch((err) => setError(String((err as Error).message ?? err)));
   }
 
   async function handleRefresh() {
@@ -173,6 +207,18 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
       )}
       {detail?.lastError && <p className="detail__cap">{detail.lastError}</p>}
       {error && <p className="error">{error}</p>}
+      {openNote && (
+        <p className="detail__notice">
+          {openNote}
+          <button
+            className="detail__notice-dismiss"
+            aria-label="Dismiss"
+            onClick={() => setOpenNote(null)}
+          >
+            ×
+          </button>
+        </p>
+      )}
 
       {loading ? (
         <p className="subtitle">Loading detail…</p>
@@ -260,8 +306,8 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
                       {a.sessionId ? (
                         <button
                           className="activity__text activity__text--open"
-                          title="Open this project in VS Code"
-                          onClick={handleOpen}
+                          title={chatAction(a).title}
+                          onClick={() => handleOpenChat(a)}
                         >
                           <span className="activity__open-text">{a.text}</span>
                           <span className="activity__open-glyph">↗</span>

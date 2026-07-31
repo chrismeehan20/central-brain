@@ -762,6 +762,34 @@ button.attention__item:focus-visible {
   margin: 0 0 1rem;
 }
 
+/* Informational, not an error — e.g. "Codex can't reopen a specific chat yet". */
+.detail__notice {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  background: rgba(125, 211, 252, 0.07);
+  border: 1px solid rgba(125, 211, 252, 0.25);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.8rem;
+  margin: 0 0 1rem;
+}
+
+.detail__notice-dismiss {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 0;
+  line-height: 1;
+}
+
+.detail__notice-dismiss:hover {
+  color: var(--ink);
+}
+
 .detail__cols {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

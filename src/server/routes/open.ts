@@ -1,52 +1,35 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import type { FastifyInstance } from "fastify";
-import type { Project } from "@shared/types.js";
 import { runScan, getCachedProjects, getLastScanAt } from "../scan/index.js";
-
-const execFileAsync = promisify(execFile);
+import { getAttentionItems } from "../alert/attention.js";
+import { launch, resolveOpenAction } from "../open/launch.js";
 
 interface OpenBody {
   projectPath: string;
-}
-
-export type OpenResolution = { error: { status: number; message: string } } | { path: string };
-
-/**
- * The client may only open paths the scanner already knows about — the exact
- * cached path, never the raw request string, is what reaches `open`.
- */
-export function resolveOpenTarget(projects: Project[], body: unknown): OpenResolution {
-  const projectPath = (body as Partial<OpenBody> | null | undefined)?.projectPath;
-  if (!projectPath || typeof projectPath !== "string") {
-    return { error: { status: 400, message: "projectPath is required" } };
-  }
-  const project = projects.find((p) => p.path === projectPath);
-  if (!project) {
-    return { error: { status: 404, message: "project not found" } };
-  }
-  if (project.missing) {
-    return { error: { status: 409, message: "This folder no longer exists on disk." } };
-  }
-  return { path: project.path };
+  /** When present, open the specific chat (routed by tool/entrypoint) instead of just the folder. */
+  sessionId?: string;
 }
 
 export async function openRoutes(app: FastifyInstance) {
   app.post<{ Body: OpenBody }>("/api/open", async (req, reply) => {
     if (!getLastScanAt()) runScan();
-    const resolved = resolveOpenTarget(getCachedProjects(), req.body);
-    if ("error" in resolved) {
-      reply.code(resolved.error.status);
-      return { error: resolved.error.message };
+    const action = resolveOpenAction(getCachedProjects(), getAttentionItems(), req.body);
+    if ("error" in action) {
+      reply.code(action.error.status);
+      return { error: action.error.message };
     }
 
     try {
-      await execFileAsync("open", ["-a", "Visual Studio Code", resolved.path]);
+      await launch(action);
     } catch (err) {
-      app.log.error({ err }, "open in VS Code failed");
+      app.log.error({ err }, "open failed");
       reply.code(500);
-      return { error: "Couldn't launch Visual Studio Code — is it installed?" };
+      return {
+        error:
+          action.kind === "terminal-resume"
+            ? "Couldn't open Terminal to resume the chat."
+            : "Couldn't launch Visual Studio Code — is it installed?",
+      };
     }
-    return { ok: true };
+    return { ok: true, kind: action.kind, ...(action.note ? { note: action.note } : {}) };
   });
 }

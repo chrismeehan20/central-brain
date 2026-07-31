@@ -61,17 +61,26 @@ export async function relocateProject(
   return res.json();
 }
 
-/** Open/focus VS Code at a project the server already knows about. */
-export async function openInVsCode(projectPath: string): Promise<void> {
+/**
+ * Open/focus VS Code at a project the server already knows about. With a
+ * sessionId, the server reopens that specific chat in its original surface
+ * (Claude Code panel / Terminal); `note` carries an informational message for
+ * routes that can't do that (e.g. Codex).
+ */
+export async function openInVsCode(
+  projectPath: string,
+  sessionId?: string
+): Promise<{ note?: string }> {
   const res = await fetch("/api/open", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ projectPath }),
+    body: JSON.stringify({ projectPath, ...(sessionId ? { sessionId } : {}) }),
   });
+  const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `Failed to open: ${res.status}`);
   }
+  return { note: body.note };
 }
 
 export async function fetchDigest(): Promise<{ digest: DailyDigest | null }> {

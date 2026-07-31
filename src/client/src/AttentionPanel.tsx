@@ -32,11 +32,11 @@ export default function AttentionPanel() {
 
   function openProject(item: AttentionItem) {
     setOpenError(null);
-    // Never resume the session from here — it is live in some window already;
-    // focusing its project is the safe jump. (A future refinement could use the
-    // session's entrypoint to target Terminal for `cli` sessions instead.)
-    openInVsCode(item.projectPath).catch((err) =>
-      setOpenError(String((err as Error).message ?? err))
+    // For Claude items the server routes this to the focus-only deep link,
+    // landing on the exact chat tab that's waiting (never a resume — the
+    // session is live). Codex items just open the project window.
+    openInVsCode(item.projectPath, item.tool === "claude" ? item.sessionId : undefined).catch(
+      (err) => setOpenError(String((err as Error).message ?? err))
     );
   }
 
@@ -69,7 +69,11 @@ export default function AttentionPanel() {
             <button
               key={item.id}
               className={`attention__item attention__item--${item.type}`}
-              title="Open this project in VS Code — the agent is waiting there"
+              title={
+                item.tool === "claude"
+                  ? "Jump to this chat in VS Code — the agent is waiting there"
+                  : "Open this project in VS Code — the agent is waiting there"
+              }
               onClick={() => openProject(item)}
             >
               {inner}
