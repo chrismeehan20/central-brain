@@ -125,9 +125,11 @@ export function groupProjectsByRepo(
 
     const byRecency = (a: Project, b: Project) =>
       (b.lastActivity ?? "").localeCompare(a.lastActivity ?? "");
-    const primary =
-      members.find((m) => identities.get(m.path)?.isMainWorktree) ??
-      [...members].sort(byRecency)[0];
+    // Main worktrees outrank linked worktrees, but several standalone clones
+    // are ALL main worktrees — among candidates of equal rank, the most
+    // recently active one is the card, not whichever the scan met first.
+    const mains = members.filter((m) => identities.get(m.path)?.isMainWorktree);
+    const primary = (mains.length > 0 ? mains : members).slice().sort(byRecency)[0];
 
     // Sessions from sibling checkouts remember where they really ran —
     // open/resume must target that directory, not the primary's.

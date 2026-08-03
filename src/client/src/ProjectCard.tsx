@@ -97,6 +97,18 @@ export default function ProjectCard({
       label: "CI failing",
     });
   }
+  // A red sibling checkout gets its own flag only when the primary isn't
+  // already flying one — one red pill per card, naming where the fire is.
+  const redSibling = (project.checkouts ?? []).find(
+    (c) => !c.primary && c.ciStatus?.toLowerCase() === "failure"
+  );
+  if (ci !== "failure" && redSibling) {
+    flags.push({
+      kind: "failing",
+      title: `CI is red on ${redSibling.branch ?? redSibling.path} — a folded checkout of this repo`,
+      label: "CI failing (checkout)",
+    });
+  }
   /**
    * Kept separate from the branch flag on purpose: red CI on your branch means
    * go fix the code in front of you, while a red open PR means go look at
@@ -289,6 +301,10 @@ export default function ProjectCard({
                   <span className="checkouts__meta">
                     {c.sessionCount} session{c.sessionCount === 1 ? "" : "s"} ·{" "}
                     {relativeTime(c.lastActivity)}
+                    {c.dirty ? " · uncommitted" : ""}
+                    {c.ciStatus?.toLowerCase() === "failure" && (
+                      <span className="checkouts__ci-red"> · CI failing</span>
+                    )}
                   </span>
                   <button
                     className="checkouts__open"

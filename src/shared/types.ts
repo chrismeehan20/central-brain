@@ -155,6 +155,10 @@ export interface ProjectCheckout {
   branch?: string;
   lastActivity?: string;
   sessionCount: number;
+  /** Uncommitted changes in THIS checkout — a dirty worktree must not hide behind a clean primary. */
+  dirty?: boolean;
+  /** CI state of THIS checkout's branch, lowercase (same semantics as GithubStatus.ciStatus). */
+  ciStatus?: string;
 }
 
 export interface Project {

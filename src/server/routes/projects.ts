@@ -30,6 +30,21 @@ function withExtras(projects: Project[]): Project[] {
     ...p,
     github: getGithubStatus(p.path),
     summary: getCachedSummary(p.path),
+    // Each folded checkout carries its own git facts — the poller polls
+    // sibling paths precisely so the card can't claim health it doesn't have.
+    ...(p.checkouts
+      ? {
+          checkouts: p.checkouts.map((c) => {
+            const gh = getGithubStatus(c.path);
+            return {
+              ...c,
+              ...(gh?.dirty !== undefined ? { dirty: gh.dirty } : {}),
+              ...(gh?.ciStatus ? { ciStatus: gh.ciStatus } : {}),
+              ...(!c.branch && gh?.branch ? { branch: gh.branch } : {}),
+            };
+          }),
+        }
+      : {}),
     // Open detail-item texts ride along so dashboard search can match todos.
     openItems: (getCachedDetail(p.path)?.items ?? [])
       .filter((i) => i.status === "open")

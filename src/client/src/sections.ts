@@ -25,6 +25,8 @@ const DAY_MS = 86_400_000;
  */
 export function needsAttention(p: Project): boolean {
   if (p.github?.ciStatus?.toLowerCase() === "failure") return true;
+  // A folded sibling checkout with red CI is just as much yours to fix.
+  if ((p.checkouts ?? []).some((c) => c.ciStatus?.toLowerCase() === "failure")) return true;
   return (p.github?.openPrs ?? []).some(
     (pr) => !pr.isDraft && pr.ciStatus?.toLowerCase() === "failure"
   );

@@ -9,13 +9,21 @@ async function pollOnce(): Promise<void> {
   const projects = getCachedProjects();
   for (const project of projects) {
     if (project.hidden || project.missing) continue; // git/gh on a dead path is pure waste
-    try {
-      const status = await fetchGithubStatus(project.path);
-      if (status) {
-        githubDb.data[project.path] = status;
+    // Sibling checkouts are their own working trees on their own branches —
+    // a dirty or red one must not hide behind a healthy primary.
+    const paths = [
+      project.path,
+      ...(project.checkouts ?? []).filter((c) => !c.primary).map((c) => c.path),
+    ];
+    for (const p of paths) {
+      try {
+        const status = await fetchGithubStatus(p);
+        if (status) {
+          githubDb.data[p] = status;
+        }
+      } catch {
+        // leave previously cached status in place on a transient failure
       }
-    } catch {
-      // leave previously cached status in place on a transient failure
     }
   }
   await githubDb.write();

@@ -134,3 +134,17 @@ test("sibling checkouts' sessions are stamped with their source path; the primar
   assert.equal(fromWt?.checkoutPath, "/code/app-v2");
   assert.equal(fromMain?.checkoutPath, undefined);
 });
+
+test("among several standalone clones (all main worktrees), the most recent wins", () => {
+  const older = project("/code/clone-old", { sessions: [session("a", "2026-07-01T00:00:00Z")] });
+  const newer = project("/code/clone-new", { sessions: [session("b", "2026-08-01T00:00:00Z")] });
+  const result = groupProjectsByRepo(
+    [older, newer], // scan order puts the older one first
+    identities({
+      "/code/clone-old": { repoKey: "remote:github.com/u/x", isMainWorktree: true },
+      "/code/clone-new": { repoKey: "remote:github.com/u/x", isMainWorktree: true },
+    })
+  );
+  assert.equal(result.length, 1);
+  assert.equal(result[0].path, "/code/clone-new");
+});
