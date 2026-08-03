@@ -17,11 +17,19 @@ import { dismissHooksSetup, fetchHooksStatus, installHooks } from "./api";
  */
 interface Props {
   mode: "onboarding" | "settings";
+  /**
+   * Onboarding-only: reports whether this panel currently has something for
+   * the user to act on (install a hook, approve Codex). `App` uses this to
+   * hold the API-key card back until hooks onboarding is out of the way —
+   * installed, dismissed, or simply unreachable (see the fetch-rejection
+   * path below, which reports `false` rather than leaving the caller stuck).
+   */
+  onOnboardingActionable?: (actionable: boolean) => void;
 }
 
 const POLL_MS = 15_000;
 
-export default function HooksPanel({ mode }: Props) {
+export default function HooksPanel({ mode, onOnboardingActionable }: Props) {
   const [status, setStatus] = useState<HooksSetupStatus | null>(null);
   const [busy, setBusy] = useState<"claude" | "codex" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,15 +41,35 @@ export default function HooksPanel({ mode }: Props) {
         .then((s) => {
           if (!cancelled) setStatus(s);
         })
-        // Quiet: a failed status fetch must not break the dashboard around it.
-        .catch(() => {});
+        .catch(() => {
+          // Quiet: a failed status fetch must not break the dashboard around
+          // it. It also must not leave onboarding stuck waiting on hooks
+          // forever, so tell the caller there's nothing actionable here.
+          if (!cancelled) onOnboardingActionable?.(false);
+        });
     load();
     const interval = setInterval(load, POLL_MS);
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+    // `onOnboardingActionable` is a useState setter from the caller (stable
+    // identity across renders), so listing it here doesn't tear down and
+    // restart the poll loop.
+  }, [onOnboardingActionable]);
+
+  // Derive + report actionability whenever status changes (initial load,
+  // install, or dismiss) — same boolean the render below uses to decide
+  // onboarding visibility, kept in one place so they can't drift.
+  useEffect(() => {
+    if (!status) return;
+    const actionable =
+      (status.claude.dirExists && !status.claude.installed) ||
+      (status.codex.dirExists && !status.codex.installed);
+    const codexNeedsApproval =
+      status.codex.installed && !status.codex.live && !status.codex.approvalStateExists;
+    onOnboardingActionable?.(!status.setupDismissed && (actionable || codexNeedsApproval));
+  }, [status, onOnboardingActionable]);
 
   if (!status) return null;
 
