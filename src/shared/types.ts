@@ -38,8 +38,22 @@ export interface GithubStatus {
     title: string;
     state: string;
     isDraft: boolean;
+    /**
+     * Worst state across this PR's ENTIRE check rollup, lowercase: "failure"
+     * (at least one check failed/errored/was cancelled), else "pending" (at
+     * least one still running), else "success" (at least one passed).
+     * Undefined when the PR has no checks at all.
+     */
     ciStatus?: string;
   }>;
+  /**
+   * CI state of the checkout's CURRENT BRANCH — the newest workflow run on
+   * `branch`, normalized lowercase to "success" | "failure" | "pending".
+   * Undefined when that branch has never run CI, the repo has no CI, HEAD is
+   * detached (no branch to scope the query to), or `gh` was unavailable.
+   * Deliberately NOT the newest run repo-wide: a Dependabot or someone else's
+   * feature-branch run says nothing about the code you have checked out.
+   */
   ciStatus?: string;
   fetchedAt?: string;
   unavailableReason?: string;

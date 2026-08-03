@@ -34,6 +34,9 @@
   --claude: #f5b942;
   --codex: #4dd0e1;
   --danger: #f87171;
+  /* Red's neighbour, for a failure one step removed (a PR rather than the
+     branch you're standing on). */
+  --danger-pr: #fb923c;
   /* Three radii, by role rather than one value everywhere: panels, project
      cards, and small controls should not all share a corner. */
   --radius: 10px;
@@ -483,6 +486,14 @@ button.attention__item:focus-visible {
   padding: 0.15rem 0.5rem;
   background: rgba(248, 113, 113, 0.15);
   color: var(--danger);
+}
+
+/* A failing PR is the same kind of bad news as a failing branch, one step
+   further away — so: same pill, shifted off red toward amber, so the two are
+   never mistaken for each other when they appear side by side. */
+.flag--pr-failing {
+  background: rgba(251, 146, 60, 0.15);
+  color: var(--danger-pr);
 }
 
 /* The quiet channel: counts, branch, PRs, passing CI. */

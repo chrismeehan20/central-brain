@@ -109,7 +109,7 @@ coverage is deliberately out of scope for this queue.
 ## Gate
 
 Unchanged from 0001: `npm ci` + `npm run typecheck` + `npm test` +
-`npm run build`, all exit 0. Test floor at queue open: **153**. Loops that
+`npm run build`, all exit 0. Test floor at queue open: **153**; raised to **170** by Loop 6. Loops that
 touch logic add tests for what they touch; the floor ratchets up as they land.
 
 ## Queue
@@ -125,7 +125,7 @@ Model tiers per the build-loop policy: `simple` = Sonnet maker,
 | 3 | Editor buttons/tooltips honor `Preferences.editor` (ProjectCard, AttentionPanel, detail page) | simple | **merged** | [#28](https://github.com/chrismeehan20/central-brain/pull/28) |
 | 4 | Keep the last good dashboard through a transient poll failure; error becomes a banner when data exists | simple | **merged** | [#29](https://github.com/chrismeehan20/central-brain/pull/29) |
 | 5 | Onboarding: hooks panel before the API-key card; key card gated on hooks done/dismissed (D4) | simple | **merged** | [#30](https://github.com/chrismeehan20/central-brain/pull/30) |
-| 6 | GitHub signal accuracy: aggregate all `statusCheckRollup` entries (worst-of), branch-scoped `gh run list --branch`, distinguish "branch failing" from "open PR failing" (+tests) | ordinary | queued | — |
+| 6 | GitHub signal accuracy: aggregate all `statusCheckRollup` entries (worst-of), branch-scoped `gh run list --branch`, distinguish "branch failing" from "open PR failing" (+tests) | ordinary | **merged** | [#31](https://github.com/chrismeehan20/central-brain/pull/31) |
 | 7 | AI trustworthiness: digest no-activity/48 h-expiry state, summary insufficient-evidence sentinel (D3) (+tests) | ordinary | queued | — |
 | 8 | Attention rows lead with display name + tool + requested action; dismiss/snooze for heuristic alerts | ordinary | queued | — |
 | 9 | Active-vs-All split (D2): sections + filter chips (Attention/Dirty/CI/New), partition logic extracted + node:test'd (D5) | ordinary | queued | — |
