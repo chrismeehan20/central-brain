@@ -14,3 +14,9 @@ export function useDocHref(): (file: string) => string {
   const { editor } = useContext(PreferencesContext);
   return (file) => `${EDITORS[editor].scheme}://file/${encodeURI(file)}`;
 }
+
+/** The selected editor's display name, for labels and tooltips ("Open in Cursor"). */
+export function useEditorName(): string {
+  const { editor } = useContext(PreferencesContext);
+  return EDITORS[editor].shortLabel;
+}

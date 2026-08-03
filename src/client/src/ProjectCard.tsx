@@ -3,7 +3,7 @@ import type { MissingProjectTriage, Project } from "@shared/types";
 import { relativeTime } from "./format";
 import { openInVsCode, summarizeProject } from "./api";
 import { goToProject } from "./App";
-import { useDocHref } from "./prefs";
+import { useDocHref, useEditorName } from "./prefs";
 import { EyeIcon, EyeOffIcon, PinIcon } from "./Icons";
 
 interface Props {
@@ -48,6 +48,7 @@ export default function ProjectCard({
   const [openError, setOpenError] = useState<string | null>(null);
   const counts = toolCounts(project);
   const docHref = useDocHref();
+  const editorName = useEditorName();
 
   const candidates = triage?.candidates ?? [];
   const target = chosenTarget ?? candidates[0]?.path ?? null;
@@ -308,7 +309,7 @@ export default function ProjectCard({
       ) : (
         <button
           className="card__path card__path--open"
-          title="Open this folder in VS Code"
+          title={`Open this folder in ${editorName}`}
           onClick={openProject}
           disabled={opening}
         >
@@ -319,8 +320,8 @@ export default function ProjectCard({
 
       <div className="card__actions">
         {!project.missing && (
-          <button onClick={openProject} disabled={opening} title="Open this folder in VS Code">
-            {opening ? "Opening…" : "VS Code"}
+          <button onClick={openProject} disabled={opening} title={`Open this folder in ${editorName}`}>
+            {opening ? "Opening…" : editorName}
           </button>
         )}
         <button className="card__details" onClick={() => goToProject(project.path)}>

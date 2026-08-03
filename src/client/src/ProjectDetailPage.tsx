@@ -9,7 +9,7 @@ import {
   updateDetailItem,
 } from "./api";
 import { relativeTime } from "./format";
-import { useDocHref } from "./prefs";
+import { useDocHref, useEditorName } from "./prefs";
 
 interface Props {
   path: string;
@@ -56,6 +56,7 @@ function buildActivity(project?: Project): ActivityEntry[] {
 
 export default function ProjectDetailPage({ path, project, onBack }: Props) {
   const docHref = useDocHref();
+  const editorName = useEditorName();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -113,19 +114,18 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
   function chatAction(a: ActivityEntry): { title: string; sessionId?: string } {
     if (a.tool === "codex") {
       return {
-        title:
-          "Opens the project in VS Code — reopening a specific Codex chat isn't supported by the extension yet",
+        title: `Opens the project in ${editorName} — reopening a specific Codex chat isn't supported by the extension yet`,
         sessionId: a.sessionId,
       };
     }
     if (!a.hasTranscript) {
       // Transcript auto-cleaned: the chat itself is gone, only the project can open.
-      return { title: "Open this project in VS Code" };
+      return { title: `Open this project in ${editorName}` };
     }
     if (a.entrypoint === "cli" || a.entrypoint === "claude-desktop") {
       return { title: "Resume this chat in Terminal", sessionId: a.sessionId };
     }
-    return { title: "Reopen this chat in Claude Code in VS Code", sessionId: a.sessionId };
+    return { title: `Reopen this chat in Claude Code in ${editorName}`, sessionId: a.sessionId };
   }
 
   function handleOpenChat(a: ActivityEntry) {
@@ -178,7 +178,7 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
           <h1>{title}</h1>
           <button
             className="card__path card__path--open"
-            title="Open this folder in VS Code"
+            title={`Open this folder in ${editorName}`}
             onClick={handleOpen}
           >
             {path}
@@ -192,8 +192,8 @@ export default function ProjectDetailPage({ path, project, onBack }: Props) {
             </span>
           )}
           <span className="scan-time">active {relativeTime(project?.lastActivity)}</span>
-          <button onClick={handleOpen} title="Open this folder in VS Code">
-            Open in VS Code
+          <button onClick={handleOpen} title={`Open this folder in ${editorName}`}>
+            Open in {editorName}
           </button>
           <button onClick={handleRefresh} disabled={refreshing}>
             {refreshing ? "Refreshing…" : "Refresh detail"}

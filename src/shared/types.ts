@@ -206,11 +206,14 @@ export interface ApiKeyStatus {
  */
 export type EditorId = "vscode" | "cursor" | "vscodium" | "windsurf";
 
-export const EDITORS: Record<EditorId, { label: string; scheme: string; appName: string }> = {
-  vscode: { label: "Visual Studio Code", scheme: "vscode", appName: "Visual Studio Code" },
-  cursor: { label: "Cursor", scheme: "cursor", appName: "Cursor" },
-  vscodium: { label: "VSCodium", scheme: "vscodium", appName: "VSCodium" },
-  windsurf: { label: "Windsurf", scheme: "windsurf", appName: "Windsurf" },
+export const EDITORS: Record<
+  EditorId,
+  { label: string; shortLabel: string; scheme: string; appName: string }
+> = {
+  vscode: { label: "Visual Studio Code", shortLabel: "VS Code", scheme: "vscode", appName: "Visual Studio Code" },
+  cursor: { label: "Cursor", shortLabel: "Cursor", scheme: "cursor", appName: "Cursor" },
+  vscodium: { label: "VSCodium", shortLabel: "VSCodium", scheme: "vscodium", appName: "VSCodium" },
+  windsurf: { label: "Windsurf", shortLabel: "Windsurf", scheme: "windsurf", appName: "Windsurf" },
 };
 
 export const DEFAULT_EDITOR: EditorId = "vscode";
