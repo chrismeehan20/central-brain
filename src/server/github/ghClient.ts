@@ -105,6 +105,40 @@ export function normalizeRunStatus(
   return classifyValue(runRecord.conclusion) ?? classifyValue(runRecord.status);
 }
 
+export interface BranchRun {
+  workflowName?: string;
+  status?: string;
+  conclusion?: string | null;
+}
+
+/**
+ * Branch verdict over `gh run list` output (newest first): the LATEST run of
+ * EACH workflow counts, worst-first across workflows. Reading only the single
+ * newest run — as this used to — let one workflow's fresh green hide another
+ * workflow's standing red on the same branch.
+ */
+export function aggregateBranchRuns(runs: BranchRun[]): CiClass | undefined {
+  if (!Array.isArray(runs) || runs.length === 0) return undefined;
+  const latest = new Map<string, BranchRun>();
+  for (const [i, r] of runs.entries()) {
+    // A row with no workflow name can't be matched to older runs of "its"
+    // workflow, so it counts individually rather than being dropped.
+    const key = r.workflowName ?? `#${i}`;
+    if (!latest.has(key)) latest.set(key, r);
+  }
+  let pending = false;
+  let success = false;
+  for (const r of latest.values()) {
+    const cls = normalizeRunStatus(r);
+    if (cls === "failure") return "failure";
+    if (cls === "pending") pending = true;
+    if (cls === "success") success = true;
+  }
+  if (pending) return "pending";
+  if (success) return "success";
+  return undefined;
+}
+
 /**
  * Reuses the user's existing `gh` CLI auth (no new token needed). Degrades
  * silently when gh is missing, the remote isn't GitHub, or we're offline —
@@ -172,13 +206,24 @@ export async function fetchGithubStatus(projectPath: string): Promise<GithubStat
   // branch to ask about, so we'd rather say nothing than say something wrong.
   if (status.branch) {
     try {
+      // 20 covers the branch's recent history across every workflow; the
+      // aggregation keeps only the newest run per workflow anyway.
       const runJson = await run(
         "gh",
-        ["run", "list", "-L", "1", "--branch", status.branch, "--json", "status,conclusion"],
+        [
+          "run",
+          "list",
+          "-L",
+          "20",
+          "--branch",
+          status.branch,
+          "--json",
+          "workflowName,status,conclusion",
+        ],
         projectPath
       );
-      const runs: any[] = JSON.parse(runJson || "[]");
-      const ci = normalizeRunStatus(runs[0]);
+      const runs: BranchRun[] = JSON.parse(runJson || "[]");
+      const ci = aggregateBranchRuns(runs);
       if (ci) status.ciStatus = ci;
     } catch {
       // no CI configured or gh unavailable
