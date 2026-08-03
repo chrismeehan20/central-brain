@@ -21,7 +21,14 @@ export interface HookRow {
   command?: string;
 }
 
-/** States where the user still has something to do. Drives onboarding visibility. */
+/**
+ * States where the user has something to go and do — click Install, approve in
+ * Codex, fix a file by hand.
+ *
+ * This is the one that holds the API-key card back, so it must not include a
+ * passive wait: someone who has approved and then not opened Codex again would
+ * be blocked from the key card indefinitely.
+ */
 export const ACTIONABLE_CODEX_STATES: ReadonlySet<CodexHooksDiagnosis["overall"]> = new Set([
   "needs_install",
   "needs_repair",
@@ -29,6 +36,48 @@ export const ACTIONABLE_CODEX_STATES: ReadonlySet<CodexHooksDiagnosis["overall"]
   "config_error",
   "disabled",
 ]);
+
+/**
+ * States where setup is not finished yet, whether or not the user can hurry it
+ * along. Drives whether the onboarding card stays on screen.
+ *
+ * Broader than ACTIONABLE by exactly one state, and that one matters:
+ * `waiting_for_verification` is reached the moment the user approves in Codex —
+ * the hardest step in the whole flow. Retiring the card there meant it vanished
+ * on completion of that step and the confirmation only ever appeared in
+ * Settings, where a first-run user has no reason to look. A setup flow that
+ * ends one step before the payoff reads as one that didn't work.
+ */
+export const IN_FLIGHT_CODEX_STATES: ReadonlySet<CodexHooksDiagnosis["overall"]> = new Set([
+  ...ACTIONABLE_CODEX_STATES,
+  "waiting_for_verification",
+]);
+
+export interface OnboardingVisibility {
+  visible: boolean;
+  /** Everything resolved while the card was up: show the payoff, not nothing. */
+  celebrating: boolean;
+}
+
+/**
+ * Whether the onboarding card should be on screen, and in which of its two
+ * moods.
+ *
+ * `sawIncomplete` is what keeps the success state from appearing to someone who
+ * simply loaded a dashboard that was already working — they never started a
+ * flow, so there is nothing to congratulate them on. It also means the payoff
+ * survives until dismissed rather than flashing past on one poll.
+ */
+export function onboardingVisibility(opts: {
+  setupDismissed: boolean;
+  inFlight: boolean;
+  sawIncomplete: boolean;
+}): OnboardingVisibility {
+  if (opts.setupDismissed) return { visible: false, celebrating: false };
+  if (opts.inFlight) return { visible: true, celebrating: false };
+  const celebrating = opts.sawIncomplete;
+  return { visible: celebrating, celebrating };
+}
 
 export function codexRow(diagnosis: CodexHooksDiagnosis, lastEventAt?: string): HookRow {
   const detail = diagnosis.diagnostics.join(" ");

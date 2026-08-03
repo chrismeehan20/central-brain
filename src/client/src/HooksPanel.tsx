@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CodexHooksDiagnosis, HooksSetupStatus } from "@shared/types";
 import { dismissHooksSetup, fetchHooksStatus, installHooks } from "./api";
-import { ACTIONABLE_CODEX_STATES, claudeRow, codexRow, type HookRow } from "./hooksCopy";
+import {
+  ACTIONABLE_CODEX_STATES,
+  claudeRow,
+  codexRow,
+  IN_FLIGHT_CODEX_STATES,
+  onboardingVisibility,
+  type HookRow,
+} from "./hooksCopy";
 
 /**
  * Dashboard-driven hook install — the "Connect your tools" card.
@@ -88,17 +95,33 @@ export default function HooksPanel({ mode, onOnboardingActionable }: Props) {
     // identity across renders), so listing it here doesn't restart the loop.
   }, [onOnboardingActionable]);
 
-  const actionable = status
-    ? (status.claude.dirExists && !status.claude.installed) || ACTIONABLE_CODEX_STATES.has(status.codex.diagnosis.overall)
+  const claudeNeedsUser = status ? status.claude.dirExists && !status.claude.installed : false;
+  // Two predicates, deliberately: `needsUser` gates the API-key card below and
+  // must not include a passive wait, or someone who approved and then didn't
+  // reopen Codex would be blocked from it indefinitely. `inFlight` decides
+  // whether this card stays on screen, and does include that wait.
+  const needsUser = status
+    ? claudeNeedsUser || ACTIONABLE_CODEX_STATES.has(status.codex.diagnosis.overall)
+    : false;
+  const inFlight = status
+    ? claudeNeedsUser || IN_FLIGHT_CODEX_STATES.has(status.codex.diagnosis.overall)
     : false;
 
+  // Remembers that a flow was under way, so the success state is shown to
+  // someone who finished one — and never to someone who just loaded a
+  // dashboard that already worked.
+  const sawIncomplete = useRef(false);
+  useEffect(() => {
+    if (inFlight) sawIncomplete.current = true;
+  }, [inFlight]);
+
   // Derive + report actionability whenever status changes (initial load,
-  // install, or dismiss) — same value the render below uses to decide
-  // onboarding visibility, kept in one place so they can't drift.
+  // install, or dismiss) — same value the render below uses, kept in one place
+  // so they can't drift.
   useEffect(() => {
     if (!status) return;
-    onOnboardingActionable?.(!status.setupDismissed && actionable);
-  }, [status, actionable, onOnboardingActionable]);
+    onOnboardingActionable?.(!status.setupDismissed && needsUser);
+  }, [status, needsUser, onOnboardingActionable]);
 
   const run = useCallback(async (tool: "claude" | "codex") => {
     setBusy(tool);
@@ -129,9 +152,15 @@ export default function HooksPanel({ mode, onOnboardingActionable }: Props) {
 
   if (!status) return null;
 
-  // The onboarding card earns its screen space only while there is something
-  // to do; the settings copy is always reachable.
-  if (mode === "onboarding" && (status.setupDismissed || !actionable)) return null;
+  const { visible, celebrating } = onboardingVisibility({
+    setupDismissed: status.setupDismissed,
+    inFlight,
+    sawIncomplete: sawIncomplete.current,
+  });
+  // The onboarding card earns its screen space while setup is unfinished, plus
+  // one last render once it finishes — the payoff. The settings copy is always
+  // reachable regardless.
+  if (mode === "onboarding" && !visible) return null;
 
   const renderRow = (tool: "claude" | "codex", label: string, row: HookRow) => (
     <div className="hooks__row" key={tool}>
@@ -191,23 +220,31 @@ export default function HooksPanel({ mode, onOnboardingActionable }: Props) {
   return (
     <section className="setup setup--onboarding">
       <div className="setup__header">
-        <h2 className="setup__title">Get alerts the moment an agent needs you</h2>
+        <h2 className="setup__title">
+          {celebrating ? "You're connected" : "Get alerts the moment an agent needs you"}
+        </h2>
       </div>
       <p className="setup__lede">
-        Install a hook so Claude Code and Codex tell Central Brain when a session needs your OK —
-        and, for Claude Code, when it's waiting on your reply. It only touches its own entries —
-        your existing hooks are never changed, and there's a backup either way.
+        {celebrating
+          ? "Events are arriving. Central Brain will tell you the moment a session needs your OK, without you having to watch it."
+          : "Install a hook so Claude Code and Codex tell Central Brain when a session needs your OK — and, for Claude Code, when it's waiting on your reply. It only touches its own entries — your existing hooks are never changed, and there's a backup either way."}
       </p>
       {body}
       <div className="setup__footer">
-        <span className="setup__meta">Without hooks, alerts rely on slower file scanning.</span>
+        <span className="setup__meta">
+          {celebrating
+            ? "You can check this any time under ⚙ → Connected tools."
+            : "Without hooks, alerts rely on slower file scanning."}
+        </span>
         <div className="setup__actions">
           <button
             className="setup__secondary"
             onClick={() => dismissHooksSetup().then(setStatus).catch(() => {})}
             disabled={busy !== null}
           >
-            Later
+            {/* Dismissal is persisted, which is right here: once it's proven
+                working there is nothing to come back to this card for. */}
+            {celebrating ? "Done" : "Later"}
           </button>
         </div>
       </div>

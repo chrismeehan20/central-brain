@@ -1,7 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { CodexHooksDiagnosis, CodexHooksOverall } from "@shared/types";
-import { ACTIONABLE_CODEX_STATES, claudeRow, codexRow } from "./hooksCopy";
+import {
+  ACTIONABLE_CODEX_STATES,
+  claudeRow,
+  codexRow,
+  IN_FLIGHT_CODEX_STATES,
+  onboardingVisibility,
+} from "./hooksCopy";
 
 /**
  * The copy is what was actually wrong before: the server's booleans could
@@ -140,4 +146,66 @@ test("Claude's row never claims connected without a live event", () => {
   });
   assert.equal(live.good, true);
   assert.match(live.state, /Connected/);
+});
+
+/**
+ * Onboarding visibility — the card has to survive the step it used to die on.
+ *
+ * Approving inside Codex is the hardest thing the flow asks for, and it moves
+ * the state to `waiting_for_verification`. Retiring the card there meant it
+ * vanished the instant the user completed that step, with the confirmation
+ * only ever appearing in Settings.
+ */
+
+test("the passive wait keeps the card up but does not gate the API-key card", () => {
+  // Two different questions: "is setup finished" and "is the user blocked".
+  assert.equal(IN_FLIGHT_CODEX_STATES.has("waiting_for_verification"), true);
+  assert.equal(
+    ACTIONABLE_CODEX_STATES.has("waiting_for_verification"),
+    false,
+    "someone who approved and didn't reopen Codex must not be blocked from the key card forever"
+  );
+});
+
+test("everything that needs the user also counts as unfinished", () => {
+  for (const state of ACTIONABLE_CODEX_STATES) {
+    assert.ok(IN_FLIGHT_CODEX_STATES.has(state), `${state} needs the user but reads as finished`);
+  }
+});
+
+test("finished states are in neither set", () => {
+  for (const done of ["connected", "not_detected", "stale"] as const) {
+    assert.equal(IN_FLIGHT_CODEX_STATES.has(done), false, done);
+    assert.equal(ACTIONABLE_CODEX_STATES.has(done), false, done);
+  }
+});
+
+test("the card survives approval and lands on a visible success state", () => {
+  // Walk the flow the way a first-run user does.
+  const install = onboardingVisibility({ setupDismissed: false, inFlight: true, sawIncomplete: false });
+  assert.deepEqual(install, { visible: true, celebrating: false });
+
+  // …approve in Codex → waiting_for_verification, still in flight.
+  const approved = onboardingVisibility({ setupDismissed: false, inFlight: true, sawIncomplete: true });
+  assert.deepEqual(approved, { visible: true, celebrating: false });
+
+  // …first event lands → connected. This is the render that used to be null.
+  const connected = onboardingVisibility({ setupDismissed: false, inFlight: false, sawIncomplete: true });
+  assert.deepEqual(connected, { visible: true, celebrating: true });
+});
+
+test("a dashboard that already worked shows no card and congratulates nobody", () => {
+  assert.deepEqual(onboardingVisibility({ setupDismissed: false, inFlight: false, sawIncomplete: false }), {
+    visible: false,
+    celebrating: false,
+  });
+});
+
+test("Later still dismisses, from either mood", () => {
+  for (const inFlight of [true, false]) {
+    assert.deepEqual(onboardingVisibility({ setupDismissed: true, inFlight, sawIncomplete: true }), {
+      visible: false,
+      celebrating: false,
+    });
+  }
 });

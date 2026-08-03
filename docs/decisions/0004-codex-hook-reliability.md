@@ -239,6 +239,14 @@ filenames collided and then sorted non-chronologically (so pruning could drop
 the newer snapshot), and the repair state's copy opened with the word
 "Connected".
 
+A fourth was found by reading the finished flow rather than by a test, and
+closed in Loop 8: the onboarding card retired at `waiting_for_verification`,
+which is the state reached the instant the user approves inside Codex. The card
+therefore disappeared on completion of the hardest step in the flow, and the
+"Connected" confirmation existed only in Settings. Loop 8 splits "setup is
+unfinished" (keeps the card up) from "the user is blocked" (holds the API-key
+card back), so the wait keeps the card without also blocking an unrelated one.
+
 ### What would still be worth doing
 
 - **Claude's forwarder gets none of this.** `hooks/notify.sh` still hardcodes
