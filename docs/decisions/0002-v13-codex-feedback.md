@@ -153,3 +153,33 @@ Model tiers per the build-loop policy: `simple` = Sonnet maker,
   Dependabot #12); test floor 153 -> 228; the two `npm audit` highs that
   remain (`fast-uri`, `find-my-way`) are fastify transitives already tracked
   as 0001 Loop 12. Vite 8 cleared the `postcss` advisory.
+
+---
+
+## Round 2 — external re-review findings (2026-08-03)
+
+Codex re-reviewed the merged queue and found real defects; each was verified
+against the code and this machine before queueing. Two are release blockers.
+
+Verification notes that sharpen the findings:
+
+- **The hook-trust bug is worse than reported.** Current Codex
+  (0.146.0-alpha) stamps a per-group `trusted_hash` INTO `hooks.json` when
+  the user approves; `~/.codex/hooks.state` does not exist on this machine at
+  all. Zero groups in the live hooks.json carry a hash — so no Codex hook
+  fires here (ours or Better Peacock's), while `codexApprovalStateExists`
+  keeps testing for a file today's Codex never writes. On a machine with a
+  stale hooks.state the panel would claim success; here it just nags with the
+  wrong instructions.
+- **Checkout routing reproduced from code:** `resolveOpenAction` matches only
+  top-level project paths, so the checkout rows' own Open button 404s, and
+  merged sessions lose their cwd so terminal resume runs in the primary.
+
+| # | Loop | Tier | Status | PR |
+|---|---|---|---|---|
+| R0 | Record round 2; bump `fast-uri` 3.1.5 + `find-my-way` 9.7.0 (last 2 highs; audit now clean) | simple | **merged** | [#38](https://github.com/chrismeehan20/central-brain/pull/38) |
+| R1 | **Blocker** — checkout identity: `SessionRef.checkoutPath` survives grouping; open/resume/attention resolve secondary checkout paths and run in the right directory | hard | queued | — |
+| R2 | **Blocker** — Codex hook trust: read per-group `trusted_hash` from hooks.json (`trusted`), retire the hooks.state existence check, honest nag copy; SessionEnd timeout 3s; per-tool onboarding promise | hard | queued | — |
+| R3 | Grouping state: most-recent wins among multiple main-worktree clones; sibling checkouts' dirty/CI state polled and surfaced (rows + card flags) | ordinary | queued | — |
+| R4 | Branch CI: aggregate the latest run per workflow on the branch (`-L 20`, group by workflowName, worst-of) instead of the single newest run | ordinary | queued | — |
+| R5 | Node floor: engines + README to >=22.12 (Vite 8's real minimum); sidecar `find_node` version-checks candidates instead of taking the first file; local cargo gate (CI has no Rust job) | hard | queued | — |
