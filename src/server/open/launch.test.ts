@@ -233,3 +233,77 @@ test("buildTerminalResume quotes the cwd and embeds the resume command", () => {
   // shellQuote's '\'' escape, with its backslash doubled again for AppleScript.
   assert.ok(doScript.includes(`cd '/Users/o'\\\\''brien/my code'`));
 });
+
+// ---- grouped-checkout routing (round 2, R1) ----
+
+const CHECKOUT_PATH = "/Users/someone/code/widget-v2";
+
+/** A card standing for two checkouts: the primary plus a worktree sibling. */
+function makeGroupedProject(overrides: Partial<Project> = {}): Project {
+  return makeProject({
+    checkouts: [
+      { path: PROJECT_PATH, primary: true, sessionCount: 1 },
+      { path: CHECKOUT_PATH, primary: false, branch: "redesign", sessionCount: 1 },
+    ],
+    ...overrides,
+  });
+}
+
+test("opening a folded checkout's path opens THAT directory, not a 404 and not the primary", () => {
+  const res = resolve(makeGroupedProject(), { projectPath: CHECKOUT_PATH });
+  assert.ok(!("error" in res));
+  assert.equal(res.kind, "project");
+  assert.deepEqual(res.steps[0].args.at(-1), CHECKOUT_PATH);
+});
+
+test("a checkout path still 404s when it belongs to no card", () => {
+  const res = resolve(makeGroupedProject(), { projectPath: "/Users/someone/code/unrelated" });
+  assert.ok("error" in res);
+  assert.equal(res.error.status, 404);
+});
+
+test("terminal resume for a sibling-checkout session runs in the checkout, not the primary", () => {
+  const session = makeSession({ entrypoint: "cli", checkoutPath: CHECKOUT_PATH });
+  const res = resolve(makeGroupedProject({ sessions: [session] }), {
+    projectPath: PROJECT_PATH,
+    sessionId: session.sessionId,
+  });
+  assert.ok(!("error" in res));
+  assert.equal(res.kind, "terminal-resume");
+  assert.match(res.steps[0].args.join(" "), /widget-v2/);
+  assert.ok(!res.steps[0].args.join(" ").includes(`'${PROJECT_PATH}'`));
+});
+
+test("the vscode-chat deep link opens the session's own checkout window", () => {
+  const session = makeSession({ checkoutPath: CHECKOUT_PATH });
+  const res = resolve(makeGroupedProject({ sessions: [session] }), {
+    projectPath: PROJECT_PATH,
+    sessionId: session.sessionId,
+  });
+  assert.ok(!("error" in res));
+  assert.equal(res.kind, "vscode-chat");
+  assert.deepEqual(res.steps[0].args.at(-1), CHECKOUT_PATH);
+});
+
+test("an attention item arriving with the checkout's real path resolves and focuses there", () => {
+  const session = makeSession({ checkoutPath: CHECKOUT_PATH });
+  const attention = [makeAttention({ projectPath: CHECKOUT_PATH })];
+  const res = resolve(makeGroupedProject({ sessions: [session] }), {
+    projectPath: CHECKOUT_PATH,
+    sessionId: session.sessionId,
+  }, attention);
+  assert.ok(!("error" in res));
+  assert.equal(res.kind, "vscode-chat");
+  assert.deepEqual(res.steps[0].args.at(-1), CHECKOUT_PATH);
+});
+
+test("a session with no checkoutPath keeps resolving to the project's own path", () => {
+  const session = makeSession({ entrypoint: "cli" });
+  const res = resolve(makeGroupedProject({ sessions: [session] }), {
+    projectPath: PROJECT_PATH,
+    sessionId: session.sessionId,
+  });
+  assert.ok(!("error" in res));
+  assert.equal(res.kind, "terminal-resume");
+  assert.match(res.steps[0].args.join(" "), /code\/widget'/);
+});

@@ -129,8 +129,12 @@ export function groupProjectsByRepo(
       members.find((m) => identities.get(m.path)?.isMainWorktree) ??
       [...members].sort(byRecency)[0];
 
+    // Sessions from sibling checkouts remember where they really ran —
+    // open/resume must target that directory, not the primary's.
     const sessions = members
-      .flatMap((m) => m.sessions)
+      .flatMap((m) =>
+        m === primary ? m.sessions : m.sessions.map((s) => ({ ...s, checkoutPath: m.path }))
+      )
       .sort((a, b) => (a.lastActivity > b.lastActivity ? -1 : 1));
 
     const checkouts: ProjectCheckout[] = members

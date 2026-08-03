@@ -121,23 +121,37 @@ export function resolveOpenAction(
   if (!projectPath || typeof projectPath !== "string") {
     return err(400, "projectPath is required");
   }
-  const project = projects.find((p) => p.path === projectPath);
+  // A card can stand for several checkouts of one repository, and hook events
+  // arrive with the checkout's real path — so match either the project itself
+  // or one of its folded checkouts. Still only scanner-known paths: the raw
+  // request string never reaches `open` unless the scanner produced it.
+  const project = projects.find(
+    (p) => p.path === projectPath || p.checkouts?.some((c) => c.path === projectPath)
+  );
   if (!project) return err(404, "project not found");
   if (project.missing) return err(409, "This folder no longer exists on disk.");
+  const requestedDir =
+    project.path === projectPath
+      ? project.path
+      : project.checkouts!.find((c) => c.path === projectPath)!.path;
 
   if (sessionId === undefined) {
-    return { kind: "project", steps: [buildVsCodeOpen(project.path, editor)] };
+    return { kind: "project", steps: [buildVsCodeOpen(requestedDir, editor)] };
   }
   if (typeof sessionId !== "string" || !SAFE_SESSION_ID.test(sessionId)) {
     return err(400, "sessionId is invalid");
   }
   const session = project.sessions.find((s) => s.sessionId === sessionId);
   if (!session) return err(404, "session not found in this project");
+  // The directory the session actually ran in wins over both the card's
+  // primary path and whatever the request named — a worktree session resumed
+  // in the wrong working tree edits the wrong branch.
+  const sessionDir = session.checkoutPath ?? project.path;
 
   if (session.tool === "codex") {
     // No safe mechanism yet: the Codex extension has no session deep link, and
     // codex:// is Desktop-only and unstable. Revisit on openai/codex#21779.
-    return { kind: "project", steps: [buildVsCodeOpen(project.path, editor)], note: CODEX_NOTE };
+    return { kind: "project", steps: [buildVsCodeOpen(sessionDir, editor)], note: CODEX_NOTE };
   }
 
   // A session waiting on the user is live by definition. Resuming a live
@@ -151,9 +165,9 @@ export function resolveOpenAction(
   const terminalSurface = session.entrypoint === "cli" || session.entrypoint === "claude-desktop";
   if (attentionActive) {
     if (terminalSurface) {
-      return { kind: "project", steps: [buildVsCodeOpen(project.path, editor)] };
+      return { kind: "project", steps: [buildVsCodeOpen(sessionDir, editor)] };
     }
-    return vsCodeChat(project.path, sessionId, editor);
+    return vsCodeChat(sessionDir, sessionId, editor);
   }
 
   if (!session.transcriptPath) return err(409, GONE_TRANSCRIPT);
@@ -164,11 +178,11 @@ export function resolveOpenAction(
   }
 
   if (terminalSurface) {
-    return { kind: "terminal-resume", steps: [buildTerminalResume(project.path, sessionId)] };
+    return { kind: "terminal-resume", steps: [buildTerminalResume(sessionDir, sessionId)] };
   }
   // claude-vscode — or unknown entrypoint, where the extension is the right
   // default (it dominates real usage, and the failure mode is a fresh panel).
-  return vsCodeChat(project.path, sessionId, editor);
+  return vsCodeChat(sessionDir, sessionId, editor);
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

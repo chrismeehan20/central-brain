@@ -178,7 +178,7 @@ Verification notes that sharpen the findings:
 | # | Loop | Tier | Status | PR |
 |---|---|---|---|---|
 | R0 | Record round 2; bump `fast-uri` 3.1.5 + `find-my-way` 9.7.0 (last 2 highs; audit now clean) | simple | **merged** | [#38](https://github.com/chrismeehan20/central-brain/pull/38) |
-| R1 | **Blocker** — checkout identity: `SessionRef.checkoutPath` survives grouping; open/resume/attention resolve secondary checkout paths and run in the right directory | hard | queued | — |
+| R1 | **Blocker** — checkout identity: `SessionRef.checkoutPath` survives grouping; open/resume/attention resolve secondary checkout paths and run in the right directory | hard | **merged** | [#39](https://github.com/chrismeehan20/central-brain/pull/39) |
 | R2 | **Blocker** — Codex hook trust: read per-group `trusted_hash` from hooks.json (`trusted`), retire the hooks.state existence check, honest nag copy; SessionEnd timeout 3s; per-tool onboarding promise | hard | queued | — |
 | R3 | Grouping state: most-recent wins among multiple main-worktree clones; sibling checkouts' dirty/CI state polled and surfaced (rows + card flags) | ordinary | queued | — |
 | R4 | Branch CI: aggregate the latest run per workflow on the branch (`-L 20`, group by workflowName, worst-of) instead of the single newest run | ordinary | queued | — |

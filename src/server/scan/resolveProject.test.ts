@@ -118,3 +118,19 @@ test("the primary's name, overrides and docs win; its identity fields survive th
   assert.equal(card.displayName, "My App");
   assert.equal(card.pinned, true);
 });
+
+test("sibling checkouts' sessions are stamped with their source path; the primary's are not", () => {
+  const main = project("/code/app", { sessions: [session("a", "2026-07-01T00:00:00Z")] });
+  const wt = project("/code/app-v2", { sessions: [session("b", "2026-08-02T00:00:00Z")] });
+  const [card] = groupProjectsByRepo(
+    [main, wt],
+    identities({
+      "/code/app": { repoKey: "remote:github.com/u/app", isMainWorktree: true },
+      "/code/app-v2": { repoKey: "remote:github.com/u/app" },
+    })
+  );
+  const fromWt = card.sessions.find((s) => s.sessionId === "b");
+  const fromMain = card.sessions.find((s) => s.sessionId === "a");
+  assert.equal(fromWt?.checkoutPath, "/code/app-v2");
+  assert.equal(fromMain?.checkoutPath, undefined);
+});
