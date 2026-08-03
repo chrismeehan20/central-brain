@@ -156,7 +156,7 @@ export default function App() {
     }
   }
 
-  if (error) {
+  if (error && !projects) {
     return (
       <main className="shell">
         <h1>Central Brain</h1>
@@ -271,6 +271,18 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {/* A transient poll/save failure while good data is already on screen —
+          degrade to a strip, not a full wipe. The 30s poll clears `error` on
+          its next success, so this self-heals without the ✕. */}
+      {error && (
+        <div className="error-banner">
+          <p className="error-banner__text">Server not reachable — showing the last good data. {error}</p>
+          <button className="error-banner__dismiss" onClick={() => setError(null)} aria-label="Dismiss">
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* First run with no key: ask once, up top, where it cannot be missed.
           Afterwards the same panel lives behind the topbar gear. */}
