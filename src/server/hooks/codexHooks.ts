@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { codexForwarderPath, installCodexForwarder, shellQuote } from "./forwarder.js";
+import { codexForwarderPath, installCodexForwarder, rotateInstallId, shellQuote } from "./forwarder.js";
 
 /**
  * Install/uninstall logic for Codex's ~/.codex/hooks.json, factored out of the
@@ -287,17 +287,20 @@ export class CodexHooksConflictError extends Error {}
 function backup(hooksPath: string, raw: string, log: Logger): string {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   // Two writes inside the same millisecond would otherwise land on the same
-  // name, and the second would clobber the first — the very bug timestamping
-  // is here to fix, just with a narrower window. `wx` fails rather than
-  // overwrites, so the suffix is only paid for when it is actually needed.
-  let backupPath = `${hooksPath}.${stamp}.bak`;
-  for (let n = 1; ; n++) {
+  // name and the second would clobber the first — the very bug timestamping is
+  // here to fix, just with a narrower window. The counter is always present and
+  // zero-padded so that every name has one shape and sorting them lexically
+  // sorts them chronologically; `pruneBackups` relies on that to drop the
+  // OLDEST, and a variable-length suffix would have had it dropping whichever
+  // sorted first. `wx` fails rather than overwrites.
+  let backupPath = "";
+  for (let n = 0; ; n++) {
+    backupPath = `${hooksPath}.${stamp}-${String(n).padStart(2, "0")}.bak`;
     try {
       fs.writeFileSync(backupPath, raw, { mode: 0o600, flag: "wx" });
       break;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-      backupPath = `${hooksPath}.${stamp}-${n}.bak`;
     }
   }
   log(`Backed up existing Codex hooks to ${backupPath}`);
@@ -309,9 +312,10 @@ function pruneBackups(hooksPath: string, log: Logger): void {
   const dir = path.dirname(hooksPath);
   // Matches only the names we generate. A hand-made `hooks.json.before-x.bak`
   // is someone's deliberate safety copy and is not ours to delete.
-  // The trailing `-N` is the same-millisecond tiebreak `backup()` may add.
+  // The trailing `-NN` is `backup()`'s same-millisecond counter; it is always
+  // present, which is what makes a lexical sort chronological.
   const ours = new RegExp(
-    `^${escapeRegExp(path.basename(hooksPath))}\\.\\d{4}-\\d{2}-\\d{2}T[\\d-]+Z(-\\d+)?\\.bak$`
+    `^${escapeRegExp(path.basename(hooksPath))}\\.\\d{4}-\\d{2}-\\d{2}T[\\d-]+Z-\\d{2}\\.bak$`
   );
   let stale: string[];
   try {
@@ -383,6 +387,11 @@ export interface CodexHooksOptions {
   command?: string;
   events?: readonly string[];
   log?: Logger;
+  /**
+   * Where the install id lives. Defaults to the resolved data dir; tests pass
+   * a temp dir so rotating one never touches the developer's real install.
+   */
+  dataDir?: string;
 }
 
 export interface InstallResult {
@@ -517,6 +526,12 @@ export function installCodexHooks(opts: CodexHooksOptions): InstallResult {
       throw err;
     }
 
+    // The definitions changed, so every receipt collected under the old ones
+    // stops counting. Without this, a repair would inherit "Connected" from
+    // events the previous, broken wiring produced — and the user would never
+    // learn that the repair still needs approving.
+    rotateInstallId({ ...(opts.dataDir ? { dataDir: opts.dataDir } : {}) });
+
     if (added.length > 0) log(`Installed central-brain Codex hooks for: ${added.join(", ")}`);
     if (updated.length > 0) {
       log(`Repaired stale central-brain hook definitions for: ${updated.join(", ")}`);
@@ -595,6 +610,10 @@ export function uninstallCodexHooks(opts: Omit<CodexHooksOptions, "command" | "e
 
   const backupPath = raw !== undefined ? backup(hooksPath, raw, log) : undefined;
   writeConfig(hooksPath, config, stat);
+  // Nothing can fire any more, so no past event may keep vouching for the
+  // pipeline — this is what stops the dashboard reading "Connected" for days
+  // after an uninstall.
+  rotateInstallId({ ...(opts.dataDir ? { dataDir: opts.dataDir } : {}) });
   log(`Removed ${removed} central-brain Codex hook entr${removed === 1 ? "y" : "ies"}. Your other Codex hooks were left untouched.`);
   log("Your other hooks keep their approval: Codex trusts each hook definition");
   log("separately, and none of theirs changed.");

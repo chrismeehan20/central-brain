@@ -11,6 +11,7 @@ import {
   type HookHandlerDeps,
 } from "./attention.js";
 import { getHookLiveness, type LivenessStoreLike } from "./hookLiveness.js";
+import { FORWARDER_REVISION } from "../hooks/forwarder.js";
 
 /**
  * Every test here passes its own in-memory stores, so nothing touches
@@ -55,6 +56,9 @@ interface Harness {
   deps: HookHandlerDeps;
 }
 
+const INSTALL_ID = "attention-test-install";
+const RECEIPT = { installId: INSTALL_ID, forwarderRevision: FORWARDER_REVISION };
+
 function makeHarness(items: AttentionItem[] = [], now?: number): Harness {
   const store = makeStore(items);
   const liveness = makeLivenessStore();
@@ -68,6 +72,9 @@ function makeHarness(items: AttentionItem[] = [], now?: number): Harness {
     deps: {
       store,
       livenessStore: liveness,
+      // The real Codex route reads these off the forwarder's headers; liveness
+      // only counts an event that carries them.
+      receipt: RECEIPT,
       notify: async (opts) => {
         notifications.push(opts);
       },
@@ -234,7 +241,7 @@ test("any Codex hook event — even an ignored one — records Codex hook livene
 
   assert.equal(h.liveness.data.lastEventAt.codex, "2026-07-29T12:00:00.000Z");
   assert.equal(
-    getHookLiveness("codex", { store: h.liveness, now, windowMs: 1000 }).live,
+    getHookLiveness("codex", { store: h.liveness, now, windowMs: 1000, installId: INSTALL_ID }).live,
     true
   );
   // Claude's slot is untouched — liveness is per tool.

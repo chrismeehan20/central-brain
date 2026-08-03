@@ -7,7 +7,13 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { AddressInfo } from "node:net";
-import { CODEX_FORWARDER_NAME, installCodexForwarder, writeRuntimeEndpoint } from "./forwarder.js";
+import {
+  CODEX_FORWARDER_NAME,
+  FORWARDER_REVISION,
+  installCodexForwarder,
+  rotateInstallId,
+  writeRuntimeEndpoint,
+} from "./forwarder.js";
 import { resolveNotifyScript } from "../appPaths.js";
 
 /**
@@ -36,6 +42,8 @@ interface Received {
   url: string;
   body: string;
   contentType: string | undefined;
+  installId: string | undefined;
+  forwarderRevision: string | undefined;
 }
 
 /** An ephemeral-port server so concurrent runs (and a real one on 4317) don't collide. */
@@ -45,7 +53,13 @@ async function receiver(): Promise<{ origin: string; received: Received[] }> {
     let body = "";
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
-      received.push({ url: req.url ?? "", body, contentType: req.headers["content-type"] });
+      received.push({
+        url: req.url ?? "",
+        body,
+        contentType: req.headers["content-type"],
+        installId: req.headers["x-central-brain-install-id"] as string | undefined,
+        forwarderRevision: req.headers["x-central-brain-forwarder-revision"] as string | undefined,
+      });
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end('{"ok":true}');
     });
@@ -188,4 +202,57 @@ test("delivery finishes well inside Codex's 3s SessionEnd budget", async () => {
   const started = Date.now();
   await runScript(script, {});
   assert.ok(Date.now() - started < 2000, `forwarder took ${Date.now() - started}ms`);
+});
+
+test("every delivery carries the install id and the forwarder revision", async () => {
+  const dataDir = tempDir("cb-script-data-");
+  const { origin, received } = await receiver();
+  writeRuntimeEndpoint(origin, { dataDir });
+  const installId = rotateInstallId({ dataDir });
+  const script = installCodexForwarder({
+    dataDir,
+    sourcePath: resolveNotifyScript({ name: CODEX_FORWARDER_NAME, env: {} }),
+  }).path;
+
+  await runScript(script, {});
+
+  assert.equal(received[0].installId, installId);
+  assert.equal(received[0].forwarderRevision, FORWARDER_REVISION);
+});
+
+test("a rotated id reaches the server without touching hooks.json", async () => {
+  const dataDir = tempDir("cb-script-data-");
+  const { origin, received } = await receiver();
+  writeRuntimeEndpoint(origin, { dataDir });
+  rotateInstallId({ dataDir });
+  const script = installCodexForwarder({
+    dataDir,
+    sourcePath: resolveNotifyScript({ name: CODEX_FORWARDER_NAME, env: {} }),
+  }).path;
+  await runScript(script, {});
+
+  const rotated = rotateInstallId({ dataDir });
+  await runScript(script, {});
+
+  assert.equal(received.length, 2);
+  assert.notEqual(received[0].installId, received[1].installId);
+  assert.equal(received[1].installId, rotated);
+});
+
+test("no install id yet still delivers, simply without the id header", async () => {
+  const dataDir = tempDir("cb-script-data-");
+  const { origin, received } = await receiver();
+  writeRuntimeEndpoint(origin, { dataDir });
+  const script = installCodexForwarder({
+    dataDir,
+    sourcePath: resolveNotifyScript({ name: CODEX_FORWARDER_NAME, env: {} }),
+  }).path;
+
+  assert.equal(await runScript(script, {}), 0);
+
+  assert.equal(received.length, 1);
+  // curl drops a header given no value, so the server sees it as absent —
+  // which is exactly how an unqualifiable event should read.
+  assert.equal(received[0].installId, undefined);
+  assert.equal(received[0].forwarderRevision, FORWARDER_REVISION);
 });

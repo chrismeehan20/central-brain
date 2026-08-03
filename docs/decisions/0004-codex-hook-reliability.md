@@ -137,6 +137,15 @@ and liveness requires a recent receipt whose id matches the one on disk and
 whose revision we still support. An unqualified timestamp is no longer
 sufficient evidence for "Connected".
 
+**Accepted consequence of D4:** existing users re-verify once. Their stored
+`lastEventAt` carries no receipt, so it stops counting the moment they upgrade,
+and Codex reads as "waiting for verification" until the next event arrives —
+which for anyone actually using Codex is one prompt away, since `SessionStart`
+and `UserPromptSubmit` both fire. Meanwhile the staleness heuristic covers, and
+a spurious low-priority flag is the failure we prefer. The alternative — trust
+a receipt-less timestamp — is precisely the false "Connected" this loop exists
+to remove.
+
 ### D5 — `trusted_hash` is an approval *hint*, not the definition of working
 
 Its location inside hook groups is current-Codex behaviour, not a documented
@@ -158,8 +167,8 @@ parse. The forwarder always exits 0 and stays well inside Codex's 3s
 | Loop | Item | Tier | Status |
 |---|---|---|---|
 | 1 | Stable forwarder location + runtime endpoint discovery (D1, D2) | ordinary | **merged** (#45) |
-| 2 | Desired-state reconciliation + atomic writes & timestamped backups (D3) | ordinary | **in review** |
-| 3 | Installation identity + receipt-qualified liveness (D4) | ordinary | pending |
+| 2 | Desired-state reconciliation + atomic writes & timestamped backups (D3) | ordinary | **merged** (#47) |
+| 3 | Installation identity + receipt-qualified liveness (D4) | ordinary | **in review** |
 | 4 | `inspectCodexHooks()` diagnostic status model (D5, D-C) | ordinary | pending |
 | 5 | Durable event delivery: spool + drain (D6) | hard | pending |
 | 6 | HooksPanel renders the status model, repair vs install | ordinary | pending |

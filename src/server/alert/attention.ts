@@ -3,6 +3,7 @@ import type {
   AttentionPriority,
   AttentionType,
   HookEventPayload,
+  HookReceipt,
   SourceTool,
 } from "@shared/types.js";
 import { attentionDb } from "../store/db.js";
@@ -47,6 +48,12 @@ export interface HookHandlerDeps {
   notify?: (opts: NotifyOptions) => Promise<void>;
   emit?: (items: AttentionItem[]) => void;
   now?: number;
+  /**
+   * What the forwarder said about the wiring that produced this event. Read
+   * from request headers by the route; absent for Claude, which posts directly
+   * with no forwarder to stamp anything.
+   */
+  receipt?: Omit<HookReceipt, "receivedAt">;
 }
 
 function clearSession(store: AttentionStoreLike, sessionId: string) {
@@ -96,7 +103,11 @@ export async function handleHookEvent(
   // Recorded before any early return: an event we don't act on (PreToolUse,
   // SubagentStart, …) still proves this tool's hooks are firing, which is what
   // gates the Codex staleness heuristic.
-  await recordHookEvent(tool, { store: deps.livenessStore, now });
+  await recordHookEvent(tool, {
+    store: deps.livenessStore,
+    now,
+    ...(deps.receipt ? { receipt: deps.receipt } : {}),
+  });
 
   if (CLEARING_EVENTS.has(eventName)) {
     clearSession(store, sessionId);

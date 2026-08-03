@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { JSONFilePreset } from "lowdb/node";
 import { resolveDataDir } from "../appPaths.js";
-import type { Override, AttentionItem, GithubStatus, ProjectSummary, ProjectDetail, DailyDigest, SourceTool, Preferences } from "@shared/types.js";
+import type { Override, AttentionItem, GithubStatus, ProjectSummary, ProjectDetail, DailyDigest, HookReceipt, SourceTool, Preferences } from "@shared/types.js";
 import { DEFAULT_PREFERENCES, EDITORS } from "@shared/types.js";
 
 /** Exported so startup can log it — inside an app bundle this is the only clue to where the data went. */
@@ -47,10 +47,18 @@ export const digestDb = await JSONFilePreset<DigestData>(path.join(dataDir, "dig
  */
 export interface HookLivenessData {
   lastEventAt: Partial<Record<SourceTool, string>>; // ISO timestamps; absent = never seen
+  /**
+   * What the last event said about itself. A bare timestamp cannot distinguish
+   * "arriving now" from "arrived once, before this install broke", so the
+   * Codex forwarder stamps the wiring that produced the event and liveness
+   * checks it — see alert/hookLiveness.ts. Absent for Claude, whose hook posts
+   * directly with no forwarder to stamp anything.
+   */
+  receipts?: Partial<Record<SourceTool, HookReceipt>>;
 }
 export const hookLivenessDb = await JSONFilePreset<HookLivenessData>(
   path.join(dataDir, "hook-liveness.json"),
-  { lastEventAt: {} },
+  { lastEventAt: {}, receipts: {} },
 );
 
 /**

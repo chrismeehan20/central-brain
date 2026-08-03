@@ -6,9 +6,13 @@ import path from "node:path";
 import {
   CODEX_FORWARDER_NAME,
   codexForwarderPath,
+  ensureInstallId,
   ForwarderInstallError,
   installCodexForwarder,
+  installIdPath,
+  readInstallId,
   readRuntimeEndpoint,
+  rotateInstallId,
   runtimeEndpointPath,
   shellQuote,
   writeRuntimeEndpoint,
@@ -162,4 +166,49 @@ test("no leftover temp files survive a write", () => {
       []
     );
   }
+});
+
+test("the install id is created once and then left alone", () => {
+  const dataDir = tempDir("cb-forwarder-data-");
+
+  assert.equal(readInstallId({ dataDir }), undefined);
+  const first = ensureInstallId({ dataDir });
+  assert.match(first, /^[0-9a-f-]{36}$/);
+  assert.equal(ensureInstallId({ dataDir }), first, "a restart must not invalidate live receipts");
+  assert.equal(readInstallId({ dataDir }), first);
+  assert.equal(fs.statSync(installIdPath(dataDir)).mode & 0o777, 0o600);
+});
+
+test("rotating mints a different id", () => {
+  const dataDir = tempDir("cb-forwarder-data-");
+  const first = ensureInstallId({ dataDir });
+
+  const second = rotateInstallId({ dataDir });
+
+  assert.notEqual(second, first);
+  assert.equal(readInstallId({ dataDir }), second);
+});
+
+test("installing hooks rotates the id, so pre-repair events stop vouching", async () => {
+  const { installCodexHooks, uninstallCodexHooks } = await import("./codexHooks.js");
+  const dataDir = tempDir("cb-forwarder-data-");
+  const hooksPath = path.join(tempDir("cb-forwarder-codex-"), "hooks.json");
+  const command = '/bin/sh /somewhere/notify-codex.sh';
+
+  installCodexHooks({ hooksPath, command, log: () => {}, dataDir });
+  const afterInstall = readInstallId({ dataDir });
+  assert.ok(afterInstall);
+
+  // A no-op install changes nothing, so a working pipeline keeps its proof.
+  installCodexHooks({ hooksPath, command, log: () => {}, dataDir });
+  assert.equal(readInstallId({ dataDir }), afterInstall);
+
+  // A repair changes the definition, which needs re-approving — so the old
+  // events must stop counting.
+  installCodexHooks({ hooksPath, command: "/bin/sh /elsewhere/notify-codex.sh", log: () => {}, dataDir });
+  const afterRepair = readInstallId({ dataDir });
+  assert.notEqual(afterRepair, afterInstall);
+
+  uninstallCodexHooks({ hooksPath, log: () => {}, dataDir });
+  assert.notEqual(readInstallId({ dataDir }), afterRepair);
 });
