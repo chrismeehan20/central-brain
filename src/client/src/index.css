@@ -208,25 +208,80 @@ h1 {
   border-bottom: none;
 }
 
-/* Attention rows are buttons (click = open the project in VS Code). */
-button.attention__item {
-  background: none;
-  border: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 0;
-  font-size: 0.85rem;
-  text-align: left;
-  width: 100%;
-  color: inherit;
+/* The row itself is a plain container: its snooze/dismiss controls are real
+   buttons, so the open-the-project affordance lives on this inner region
+   instead (nesting buttons is invalid and breaks click handling). */
+.attention__lead {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-button.attention__item:hover {
+button.attention__lead {
+  background: none;
+  border: none;
+  border-radius: var(--radius-control);
+  font-size: 0.85rem;
+  font-family: inherit;
+  text-align: left;
+  color: inherit;
+  /* Negative margin cancels the padding, so adding a hover target doesn't
+     shift the row's text off the baseline it sat on before. */
+  padding: 0.2rem 0.3rem;
+  margin: -0.2rem -0.3rem;
+  cursor: pointer;
+}
+
+button.attention__lead:hover {
   background: rgba(255, 255, 255, 0.04);
 }
 
-button.attention__item:focus-visible {
+button.attention__lead:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
+}
+
+/* Quiet until hovered: these sit on every row, and two loud buttons per row
+   would out-shout the alert they belong to. */
+.attention__control {
+  flex: none;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  padding: 0.1rem 0.4rem;
+  font-family: inherit;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.attention__control:hover:not(:disabled) {
+  border-color: var(--border);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.attention__control:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.attention__control:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.attention__control--dismiss {
+  padding: 0.1rem 0.35rem;
+}
+
+.attention__control--dismiss:hover:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: var(--danger);
 }
 
 .attention__error {
@@ -255,10 +310,38 @@ button.attention__item:focus-visible {
   color: var(--codex);
 }
 
-.attention__path {
+/* The row leads with the project's name, not its path — the path is a tooltip.
+   You recognise "central-brain" instantly; /Users/you/code/central-brain is
+   twelve words of prefix you already know. */
+.attention__project {
   color: var(--ink);
-  font-family: "SF Mono", Menlo, monospace;
-  font-size: 0.78rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 18rem;
+}
+
+/* Which agent is asking, in that agent's colour — the same claude/codex pairing
+   used on the project cards. */
+.attention__tool {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+.attention__tool--claude {
+  color: var(--claude);
+}
+
+.attention__tool--codex {
+  color: var(--codex);
 }
 
 .attention__message {

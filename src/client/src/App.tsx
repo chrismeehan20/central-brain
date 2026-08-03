@@ -321,7 +321,10 @@ export default function App() {
           )
         ))}
 
-      <AttentionPanel />
+      {/* Every project, not just `visible`: an attention row must resolve its
+          project's display name even when that project is hidden or filtered
+          out by the search box. */}
+      <AttentionPanel projects={projects} />
       <DigestPanel />
 
       <ProjectGrid

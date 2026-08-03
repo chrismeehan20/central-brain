@@ -170,6 +170,14 @@ export interface AttentionItem {
   message?: string;
   createdAt: string;
   updatedAt: string;
+  /**
+   * ISO instant until which this item is hidden from the panel. The item keeps
+   * living its normal lifecycle underneath — hook events still clear it, the
+   * staleness heuristic still decays and retires it — so a snooze only ever
+   * suppresses the row, it never freezes the state behind it. A fresh hook
+   * event clears this (new information should un-hide the row).
+   */
+  snoozedUntil?: string;
 }
 
 /**
