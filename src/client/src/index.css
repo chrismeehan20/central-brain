@@ -116,6 +116,36 @@ button {
   border-color: var(--accent);
 }
 
+/* Pulled up under the topbar's own bottom margin so the chips read as part of
+   the search row rather than a second, competing toolbar. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: -1.25rem 0 1.75rem;
+}
+
+.chip {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.6rem;
+}
+
+.chip:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+/* On is a colour change, not a fill — four lit chips should still be quieter
+   than the project cards they are filtering. */
+.chip--on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 h1 {
   font-size: 1.75rem;
   margin: 0 0 0.25rem;
