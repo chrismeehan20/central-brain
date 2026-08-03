@@ -130,7 +130,7 @@ Model tiers per the build-loop policy: `simple` = Sonnet maker,
 | 8 | Attention rows lead with display name + tool + requested action; dismiss/snooze for heuristic alerts | ordinary | **merged** | [#33](https://github.com/chrismeehan20/central-brain/pull/33) |
 | 9 | Active-vs-All split (D2): sections + filter chips (Attention/Dirty/CI/New), partition logic extracted + node:test'd (D5) | ordinary | **merged** | [#34](https://github.com/chrismeehan20/central-brain/pull/34) |
 | 10 | Repository-aware grouping (D1): worktree + remote-URL detection, one card per repo with expandable checkouts | hard | **merged** | [#35](https://github.com/chrismeehan20/central-brain/pull/35) |
-| 11 | React 19: `react` + `react-dom` + both `@types` in one PR (closes what #8/#13 attempted) | ordinary | queued | — |
+| 11 | React 19: `react` + `react-dom` + both `@types` in one PR (closes what #8/#13 attempted) | ordinary | **merged** | [#36](https://github.com/chrismeehan20/central-brain/pull/36) |
 | 12 | Vite 8 + `@vitejs/plugin-react` major (what #14 attempted) | hard | queued | — |
 
 ## Stop conditions
