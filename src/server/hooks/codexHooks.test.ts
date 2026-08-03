@@ -100,7 +100,7 @@ test("installing preserves foreign handlers exactly and appends ours for every e
   assert.deepEqual(result.added, [...CODEX_HOOK_EVENTS]);
   assert.equal(result.wrote, true);
   // Timestamped, so a second install can't destroy the pre-install snapshot.
-  assert.match(path.basename(result.backupPath!), /^hooks\.json\.\d{4}-\d{2}-\d{2}T[\d-]+Z\.bak$/);
+  assert.match(path.basename(result.backupPath!), /^hooks\.json\.\d{4}-\d{2}-\d{2}T[\d-]+Z-\d{2}\.bak$/);
 
   const config = read(file);
   for (const event of ["UserPromptSubmit", "PermissionRequest", "Stop"]) {
@@ -511,10 +511,12 @@ test("each write keeps its own backup instead of overwriting one .bak", () => {
   installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
   installCodexHooks({ hooksPath: file, command: 'sh "/another/notify-codex.sh"', log: () => {}, dataDir: DATA_DIR });
 
-  const backups = fs.readdirSync(dir).filter((n) => n.endsWith(".bak"));
+  const backups = fs.readdirSync(dir).filter((n) => n.endsWith(".bak")).sort();
   assert.equal(backups.length, 2, "the pre-install snapshot must survive a second install");
-  // The oldest backup is the original, stale state — the one worth having.
-  const oldest = JSON.parse(fs.readFileSync(path.join(dir, backups.sort()[0]), "utf8")) as CodexHooksConfig;
+  // Names must sort chronologically even when both writes land in the same
+  // millisecond, or pruning would discard the wrong one. The first is the
+  // original, stale state — the snapshot actually worth keeping.
+  const oldest = JSON.parse(fs.readFileSync(path.join(dir, backups[0]), "utf8")) as CodexHooksConfig;
   assert.equal(ourEntries(oldest, "Stop")[0].command, STALE_COMMAND);
 });
 
@@ -581,4 +583,27 @@ test("pruning never deletes a backup someone made by hand", () => {
   }
 
   assert.equal(fs.existsSync(manual), true);
+});
+
+test("backup names sort chronologically, so pruning drops the oldest", () => {
+  const file = fixture("{}");
+  const dir = path.dirname(file);
+
+  // Three writes fast enough to share a millisecond on CI, which is how the
+  // original variable-width tiebreak (`-1` sorting before `.bak`) got caught.
+  for (const v of ["a", "b", "c"]) {
+    installCodexHooks({ hooksPath: file, command: `sh "/${v}/notify-codex.sh"`, log: () => {}, dataDir: DATA_DIR });
+  }
+
+  const backups = fs.readdirSync(dir).filter((n) => n.endsWith(".bak")).sort();
+  // Fixed width is the invariant: every name carries a zero-padded counter, so
+  // a lexical sort is a chronological sort no matter how fast the writes land.
+  assert.equal(new Set(backups.map((n) => n.length)).size, 1);
+  // Each backup holds the state BEFORE its write, so sorted order must read
+  // "{} , then a, then b".
+  const commandsInOrder = backups.map((n) => {
+    const config = JSON.parse(fs.readFileSync(path.join(dir, n), "utf8")) as CodexHooksConfig;
+    return ourEntries(config, "Stop")[0]?.command;
+  });
+  assert.deepEqual(commandsInOrder, [undefined, 'sh "/a/notify-codex.sh"', 'sh "/b/notify-codex.sh"']);
 });
