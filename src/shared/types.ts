@@ -65,6 +65,8 @@ export interface ProjectSummary {
   model: string;
   hash: string;
   lastError?: string; // last failed generation (API error / daily cap) — surfaced in the UI
+  /** The model judged the evidence too thin to summarize (`text` is empty) — the card says so quietly instead of showing its hedging. */
+  insufficientEvidence?: boolean;
 }
 
 export interface DailyDigest {

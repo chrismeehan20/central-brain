@@ -8,7 +8,7 @@ import { overridesDb } from "../store/db.js";
 import { getGithubStatus } from "../poll/githubPoller.js";
 import { getCachedSummary, getOrGenerateSummary } from "../ai/summarize.js";
 import { getCachedDetail } from "../ai/detail.js";
-import { getCachedDigest, getOrGenerateDigest } from "../ai/digest.js";
+import { digestQuietState, getCachedDigest, getOrGenerateDigest } from "../ai/digest.js";
 
 interface OverrideBody {
   path: string;
@@ -136,14 +136,21 @@ export async function projectsRoutes(app: FastifyInstance) {
     return { projects: withExtras(runScan()), lastScanAt: getLastScanAt() };
   });
 
-  app.get("/api/digest", async () => ({ digest: getCachedDigest() }));
+  /**
+   * `noActivity` is the deterministic quiet state: no digest *and* nothing to
+   * digest. The client renders a fixed line for it rather than leaving a stale
+   * paragraph — or an AI apology — on screen.
+   */
+  app.get("/api/digest", async () => {
+    const digest = getCachedDigest();
+    return digest ? { digest } : { digest: null, noActivity: digestQuietState() };
+  });
 
   app.post("/api/digest/refresh", async (_req, reply) => {
     const digest = await getOrGenerateDigest(true);
-    if (!digest) {
-      reply.code(503);
-      return { error: "Digest unavailable — add your Anthropic API key in Settings, or wait for some activity." };
-    }
-    return { digest };
+    if (digest) return { digest };
+    if (digestQuietState()) return { digest: null, noActivity: true };
+    reply.code(503);
+    return { error: "Digest unavailable — add your Anthropic API key in Settings, or wait for some activity." };
   });
 }

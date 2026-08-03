@@ -314,6 +314,10 @@ export default function ProjectCard({
       <div className="card__summary">
         {project.summary?.text ? (
           <p title={`generated ${relativeTime(project.summary.generatedAt)}`}>{project.summary.text}</p>
+        ) : project.summary?.insufficientEvidence ? (
+          // The model looked and had nothing grounded to say — different from
+          // never having looked, and worth distinguishing on the card.
+          <p className="card__summary--empty">Not enough activity to summarize yet.</p>
         ) : (
           <p className="card__summary--empty">No AI summary yet.</p>
         )}

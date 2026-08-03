@@ -85,13 +85,14 @@ export async function openInVsCode(
   return { note: body.note };
 }
 
-export async function fetchDigest(): Promise<{ digest: DailyDigest | null }> {
+/** `noActivity` = there is genuinely nothing to digest (not "AI is off"). */
+export async function fetchDigest(): Promise<{ digest: DailyDigest | null; noActivity?: boolean }> {
   const res = await fetch("/api/digest");
   if (!res.ok) throw new Error(`Failed to load digest: ${res.status}`);
   return res.json();
 }
 
-export async function refreshDigest(): Promise<{ digest: DailyDigest }> {
+export async function refreshDigest(): Promise<{ digest: DailyDigest | null; noActivity?: boolean }> {
   const res = await fetch("/api/digest/refresh", { method: "POST" });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
