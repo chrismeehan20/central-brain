@@ -41,6 +41,13 @@ export const CODEX_STATUS_MESSAGE = "central-brain: forwarding Codex hook event"
 /** Codex's own hook timeout field, in seconds. Matches the 10s other handlers use. */
 const HOOK_TIMEOUT_SECONDS = 10;
 
+/**
+ * Codex clamps SessionEnd handlers to 3s regardless of what the entry
+ * declares — teardown has a hard budget. Declare the real number rather than
+ * one Codex will silently ignore.
+ */
+const SESSION_END_TIMEOUT_SECONDS = 3;
+
 export interface CodexHookEntry {
   type?: string;
   command?: string;
@@ -74,11 +81,11 @@ export function buildCodexHookCommand(notifyScript: string = codexNotifyScriptPa
   return `sh "${notifyScript}"`;
 }
 
-function buildEntry(command: string): CodexHookEntry {
+function buildEntry(command: string, event?: string): CodexHookEntry {
   return {
     type: "command",
     command,
-    timeout: HOOK_TIMEOUT_SECONDS,
+    timeout: event === "SessionEnd" ? SESSION_END_TIMEOUT_SECONDS : HOOK_TIMEOUT_SECONDS,
     statusMessage: CODEX_STATUS_MESSAGE,
   };
 }
@@ -112,14 +119,34 @@ export function codexHooksInstalled(hooksPath: string, events: readonly string[]
 }
 
 /**
- * Whether Codex's one-off interactive trust approval has ever been granted on
- * this machine. `hooks.state` existing doesn't prove the CURRENT config is the
- * trusted one (trust is keyed to a hash of the whole file), but its absence
- * proves hooks have never fired — the distinction the UI needs to say
- * "approve inside Codex" vs "waiting for the first event".
+ * Whether OUR handlers are actually trusted, read the way current Codex
+ * records it: on approval, Codex stamps a `trusted_hash` into each approved
+ * hook GROUP inside hooks.json itself. (Older builds used a separate
+ * ~/.codex/hooks.state file keyed to a whole-file hash; current builds never
+ * write it, which is why testing for that file said "approved" on machines
+ * where nothing fires — or nagged forever with the wrong instructions.)
+ *
+ * True only when every event we handle has at least one of our groups AND
+ * every group of ours carries a non-empty trusted_hash. An untrusted verdict
+ * is recoverable — approving inside Codex fixes it and liveness then proves
+ * it — while a false "trusted" hides a dead pipeline, so ties break toward
+ * false.
  */
-export function codexApprovalStateExists(hooksPath: string): boolean {
-  return fs.existsSync(path.join(path.dirname(hooksPath), "hooks.state"));
+export function codexHooksTrusted(hooksPath: string, events: readonly string[] = CODEX_HOOK_EVENTS): boolean {
+  let config: CodexHooksConfig;
+  try {
+    config = readCodexHooksConfig(hooksPath);
+  } catch {
+    return false;
+  }
+  if (!config.hooks) return false;
+  return events.every((event) => {
+    const ourGroups = (config.hooks?.[event] ?? []).filter(groupContainsOurs);
+    if (ourGroups.length === 0) return false;
+    return ourGroups.every(
+      (group) => typeof group.trusted_hash === "string" && group.trusted_hash.length > 0
+    );
+  });
 }
 
 /**
@@ -217,7 +244,7 @@ export function installCodexHooks(opts: CodexHooksOptions): InstallResult {
     }
     // Appended as its own group, so it never touches handlers we don't own
     // and can be removed again independently.
-    groups.push({ hooks: [buildEntry(command)] });
+    groups.push({ hooks: [buildEntry(command, event)] });
     added.push(event);
   }
 
@@ -305,20 +332,19 @@ export function uninstallCodexHooks(opts: Omit<CodexHooksOptions, "command" | "e
  * granted, for every handler in the file.
  */
 function logTrustNotice(log: Logger, hooksPath: string): void {
-  const statePath = path.join(path.dirname(hooksPath), "hooks.state");
   log("");
   log("IMPORTANT — these hooks will NOT fire until you approve them inside Codex.");
-  log("Codex only runs hooks from a config you have explicitly trusted:");
-  log("  1. Start a new Codex session (`codex`) — it should ask you to review this hook config.");
-  log("  2. Approve it.");
-  log(`  3. Confirm it took:  ls -l ${statePath}`);
-  log("     That file (with a trusted_hash inside) appearing is the sign it worked.");
+  log("Codex only runs hook definitions you have explicitly trusted:");
+  log("  1. Start a new Codex session (`codex`) — it should ask you to review the new hooks.");
+  log("  2. Approve them.");
+  log(`  3. Confirm it took:  grep trusted_hash ${hooksPath}`);
+  log("     Codex stamps a trusted_hash into each approved hook group; every");
+  log("     central-brain group carrying one is the sign it worked.");
   log("");
-  log("Trust is keyed to a hash of the ENTIRE hook config, so adding our entries");
-  log("invalidates any approval you granted before — including for hooks that were");
-  log("already there. Until you re-approve, NO Codex hooks run at all, and Codex");
-  log("does not warn you about it.");
+  log("Trust is per hook definition, so our new entries start untrusted even if");
+  log("you approved other hooks before. Until you approve them, they run silently");
+  log("never, and Codex does not warn you about it.");
   log("");
-  log(`Until ${statePath} exists, central-brain keeps falling back to its Codex`);
-  log("staleness heuristic, which guesses from rollout-file activity and can be wrong.");
+  log("Until then, central-brain keeps falling back to its Codex staleness");
+  log("heuristic, which guesses from rollout-file activity and can be wrong.");
 }
