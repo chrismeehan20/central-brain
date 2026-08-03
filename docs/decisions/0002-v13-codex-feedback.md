@@ -131,7 +131,7 @@ Model tiers per the build-loop policy: `simple` = Sonnet maker,
 | 9 | Active-vs-All split (D2): sections + filter chips (Attention/Dirty/CI/New), partition logic extracted + node:test'd (D5) | ordinary | **merged** | [#34](https://github.com/chrismeehan20/central-brain/pull/34) |
 | 10 | Repository-aware grouping (D1): worktree + remote-URL detection, one card per repo with expandable checkouts | hard | **merged** | [#35](https://github.com/chrismeehan20/central-brain/pull/35) |
 | 11 | React 19: `react` + `react-dom` + both `@types` in one PR (closes what #8/#13 attempted) | ordinary | **merged** | [#36](https://github.com/chrismeehan20/central-brain/pull/36) |
-| 12 | Vite 8 + `@vitejs/plugin-react` major (what #14 attempted) | hard | queued | — |
+| 12 | Vite 8 + `@vitejs/plugin-react` major (what #14 attempted) | hard | **merged** | [#37](https://github.com/chrismeehan20/central-brain/pull/37) |
 
 ## Stop conditions
 
@@ -149,3 +149,7 @@ Model tiers per the build-loop policy: `simple` = Sonnet maker,
   the table still said "in progress"; statuses corrected there. 0001's
   remaining queued items (spooling, SQLite, ccusage, OTel, replay) stay parked
   behind this queue.
+- **2026-08-03** — Queue complete. All 12 loops merged (PRs #26-#37 plus
+  Dependabot #12); test floor 153 -> 228; the two `npm audit` highs that
+  remain (`fast-uri`, `find-my-way`) are fastify transitives already tracked
+  as 0001 Loop 12. Vite 8 cleared the `postcss` advisory.

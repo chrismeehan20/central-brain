@@ -7,11 +7,11 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@shared": path.resolve(__dirname, "src/shared"),
+      "@shared": path.resolve(import.meta.dirname, "src/shared"),
     },
   },
   build: {
-    outDir: path.resolve(__dirname, "dist/client"),
+    outDir: path.resolve(import.meta.dirname, "dist/client"),
     emptyOutDir: true,
   },
   server: {
