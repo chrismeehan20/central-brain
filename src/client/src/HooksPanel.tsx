@@ -160,7 +160,7 @@ export default function HooksPanel({ mode, onOnboardingActionable }: Props) {
   const body = (
     <>
       {renderRow("claude", "Claude Code", claudeRow(status.claude))}
-      {renderRow("codex", "Codex", codexRow(diagnosis, status.codex.lastEventAt))}
+      {renderRow("codex", "Codex", codexRow(diagnosis, diagnosis.lastEventAt))}
       {mode === "settings" && diagnosis.overall !== "not_detected" && (
         <p className="hooks__paths">
           Codex folder: <code>{diagnosis.codexHome}</code>

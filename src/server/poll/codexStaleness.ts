@@ -27,11 +27,18 @@ interface Tracked {
  * ended normally.
  *
  * Codex *does* have a hook system, but its hooks only fire after a one-off
- * interactive trust approval (~/.codex/hooks.state), so on a machine where that
- * has never been granted no Codex hook ever fires. Hence: keep the heuristic,
- * but stand down the moment real hook events start arriving (see the
- * hooks-live gate in `runStalenessPass`), because hooks are authoritative and
- * running both would only add false positives on top of the truth.
+ * interactive trust approval, keyed to each exact hook definition, so on a
+ * machine where that has never been granted no Codex hook ever fires. Hence:
+ * keep the heuristic, but stand down the moment real hook events start
+ * arriving (see the hooks-live gate in `runStalenessPass`), because hooks are
+ * authoritative and running both would only add false positives on top of the
+ * truth.
+ *
+ * "Arriving" is doing real work in that sentence: the gate asks
+ * `isHookLive("codex")`, which requires a recent event carrying the current
+ * install id and a supported forwarder revision. A single old event, or one
+ * from an install that has since been repaired, no longer stands the heuristic
+ * down — which is the failure mode that made this fallback look broken.
  */
 export interface StalenessContext {
   /**

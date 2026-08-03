@@ -11,8 +11,6 @@ import {
 import {
   buildCodexHookCommand,
   CodexHooksConfigError,
-  codexHooksInstalled,
-  codexHooksTrusted,
   codexHooksPath,
   installCodexHooks,
 } from "../hooks/codexHooks.js";
@@ -62,14 +60,7 @@ export function buildHooksStatus(): HooksSetupStatus {
       live: claudeLiveness.live,
       ...(claudeLiveness.lastEventAt ? { lastEventAt: claudeLiveness.lastEventAt } : {}),
     },
-    codex: {
-      dirExists: codexDirExists,
-      installed: codexHooksInstalled(codexPath),
-      trusted: codexHooksTrusted(codexPath),
-      live: codexLiveness.live,
-      ...(codexLiveness.lastEventAt ? { lastEventAt: codexLiveness.lastEventAt } : {}),
-      diagnosis,
-    },
+    codex: { diagnosis },
     setupDismissed: settingsDb.data.hooksSetupDismissed ?? false,
   };
 }

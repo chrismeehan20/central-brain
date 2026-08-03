@@ -1,6 +1,6 @@
 # 0004 — Codex hook reliability queue
 
-Status: **in progress**
+Status: **complete**
 Date opened: 2026-08-03
 Driver: `/loop-queue` (one gated build-loop at a time, merged green before the next starts)
 
@@ -195,8 +195,8 @@ would be theatre:
 | 3 | Installation identity + receipt-qualified liveness (D4) | ordinary | **merged** (#49) |
 | 4 | `inspectCodexHooks()` diagnostic status model (D5, D-C) | ordinary | **merged** (#50) |
 | 5 | Durable event delivery: spool + drain (D6) | hard | **merged** (#51) |
-| 6 | HooksPanel renders the status model, repair vs install | ordinary | **in review** |
-| 7 | Docs reconciliation: README + stale trust comments, close this record | simple | pending |
+| 6 | HooksPanel renders the status model, repair vs install | ordinary | **merged** (#52) |
+| 7 | Docs reconciliation: README + stale trust comments, close this record | simple | **in review** |
 
 Gate for every loop: `npm run typecheck && npm test && npm run build`, all
 exit 0, test count not below the previous loop's. Baseline at open: **250
@@ -205,3 +205,48 @@ tests**.
 Tests use isolated `mkdtemp` Codex homes and never read, write, or resolve the
 developer's real `~/.codex` — the convention `codexHooks.test.ts` already
 established.
+
+## Outcome
+
+All seven loops merged green. Test suite **250 → 352**.
+
+Against the definition of done the review proposed:
+
+| Requirement | Where |
+|---|---|
+| Install → approve via `/hooks` → Connected, no terminal | Loops 2, 4, 6 |
+| Moving or upgrading the app doesn't break the hook command | Loop 1 (stable path in the data dir) |
+| Changing the port needs no reinstall or re-approval | Loop 1 (endpoint discovered per delivery) |
+| Foreign hooks and their approval survive install/repair/uninstall | Loop 2 (only our own entries are ever touched) |
+| Never Connected after removal, trust loss, or an outdated install | Loops 2–4 (config + qualified receipt, both required) |
+| Events survive a temporary server outage | Loop 5 (spool + drain) |
+| Disabled or restricted hooks produce an honest diagnosis | Loop 4 (`disabled`) |
+| README no longer references `hooks.state` or whole-file trust | Loop 7 |
+
+Two requirements were **not** met, both deliberately, both recorded above:
+
+- **Custom `CODEX_HOME` from a Finder-launched app** (D-D). The diagnosis now
+  reports the resolved Codex home and hooks path, so the problem is legible
+  rather than silent, but there is no settings-persisted override or folder
+  picker. Worth building the first time it actually bites someone.
+- **Enterprise/MDM managed hooks** (D-A), a non-goal for a single-user macOS
+  app. The user-level half — detecting a Codex that has hooks switched off —
+  shipped in Loop 4.
+
+Three defects were caught by tests written in the same loop as the code they
+covered, which is the argument for writing them there: same-millisecond backup
+filenames collided and then sorted non-chronologically (so pruning could drop
+the newer snapshot), and the repair state's copy opened with the word
+"Connected".
+
+### What would still be worth doing
+
+- **Claude's forwarder gets none of this.** `hooks/notify.sh` still hardcodes
+  port 4317 and is only reachable in `CENTRAL_BRAIN_HOOK_MODE=command`, which
+  is not the default. The same stable-path and endpoint-discovery treatment
+  would apply almost unchanged.
+- **Nothing prunes the spool's quarantine directory.** It only grows on a bug,
+  so it should stay empty, but "should stay empty" is how directories fill up.
+- **A real-Codex release check remains manual.** The forwarder is tested against
+  an ephemeral server; nothing in CI runs actual Codex, and the approval flow in
+  particular can only be verified by hand.
