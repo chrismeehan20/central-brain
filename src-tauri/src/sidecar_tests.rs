@@ -67,3 +67,32 @@ fn server_probe_is_false_when_nothing_listens_and_true_when_something_does() {
         }
     }
 }
+
+#[test]
+fn version_parsing_and_floor() {
+    // Parse shapes node actually prints, plus junk.
+    assert_eq!(parse_node_version("v22.12.0\n"), Some(vec![22, 12, 0]));
+    assert_eq!(parse_node_version("23.1.0"), Some(vec![23, 1, 0]));
+    assert_eq!(parse_node_version("not-a-version"), None);
+    assert_eq!(parse_node_version(""), None);
+
+    // The floor is 22.12: 22.11 fossil out, 22.12 in, any 23+ in.
+    assert!(!version_meets_floor(&[22, 11, 9]));
+    assert!(version_meets_floor(&[22, 12, 0]));
+    assert!(version_meets_floor(&[23, 0, 0]));
+    assert!(!version_meets_floor(&[20, 19, 0])); // fine for vite, not for the node22 bundle
+}
+
+#[test]
+fn found_node_is_actually_new_enough() {
+    // find_node must never hand back a binary below the floor — the exact
+    // failure the review flagged: picking a fossil /usr/local/bin/node while
+    // a valid newer install exists elsewhere.
+    if let Some(found) = find_node() {
+        let version = node_version(&found).expect("found node must answer --version");
+        assert!(
+            version_meets_floor(&version),
+            "find_node returned {found:?} at {version:?}, below the {MIN_NODE:?} floor"
+        );
+    }
+}

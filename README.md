@@ -53,7 +53,7 @@ dashboard, but that path is neither packaged nor supported.)
 ## Install
 
 **Prerequisites:** an Apple Silicon Mac with [Node.js](https://nodejs.org)
-≥ 22.5 (any install method — Homebrew, nvm, volta, fnm, asdf, and mise are
+≥ 22.12 (any install method — Homebrew, nvm, volta, fnm, asdf, and mise are
 all found automatically). Optional: the [`gh` CLI](https://cli.github.com)
 for GitHub status, `terminal-notifier` for nicer notifications.
 
