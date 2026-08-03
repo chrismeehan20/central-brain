@@ -46,6 +46,9 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [triage, setTriage] = useState<Record<string, MissingProjectTriage> | null>(null);
   const [bulkRelocating, setBulkRelocating] = useState(false);
+  // Starts true so the key card never flashes above the hooks card before
+  // the first hooks-status fetch lands (see HooksPanel's onOnboardingActionable).
+  const [hooksOnboardingActive, setHooksOnboardingActive] = useState(true);
 
   useEffect(() => {
     const onHashChange = () => setRoute(parseRoute());
@@ -199,8 +202,13 @@ export default function App() {
     (p.openItems ?? []).some((t) => t.toLowerCase().includes(q));
 
   // Onboarding shows until a key exists or the user skips — never for a key
-  // that came from the environment, which needs no setup.
-  const showOnboarding = Boolean(settings && !settings.apiKey.configured && !settings.apiKey.setupDismissed);
+  // that came from the environment, which needs no setup. It's also step 2:
+  // held back while hooks onboarding (step 1, the "agent needs you" moment)
+  // still has something actionable, so the optional key card never outranks
+  // the core hook setup.
+  const showOnboarding =
+    Boolean(settings && !settings.apiKey.configured && !settings.apiKey.setupDismissed) &&
+    !hooksOnboardingActive;
 
   const visible = projects.filter((p) => !p.hidden && !p.missing && matches(p));
   const missing = projects.filter((p) => p.missing && !p.hidden);
@@ -284,8 +292,20 @@ export default function App() {
         </div>
       )}
 
-      {/* First run with no key: ask once, up top, where it cannot be missed.
-          Afterwards the same panel lives behind the topbar gear. */}
+      {/* Step 1 of first-run onboarding, and the product's core "agent needs
+          me" moment — shown before the key card. Self-hiding: renders only
+          while a detected tool still needs its hooks installed or approved,
+          and never alongside the settings panel, which embeds the same rows.
+          Reports actionability up so the key card below knows to wait. */}
+      {!settingsOpen && (
+        <HooksPanel mode="onboarding" onOnboardingActionable={setHooksOnboardingActive} />
+      )}
+
+      {/* Step 2: the optional Anthropic-API-key card. First run with no key
+          asks once, up top, where it cannot be missed — but only once hooks
+          onboarding is out of the way (installed or dismissed), so the
+          nice-to-have never outranks the core hook setup. Afterwards the
+          same panel lives behind the topbar gear. */}
       {settings &&
         (settingsOpen ? (
           <ApiKeyPanel
@@ -300,11 +320,6 @@ export default function App() {
             <ApiKeyPanel mode="onboarding" settings={settings} onStatusChange={handleApiKeyStatus} />
           )
         ))}
-
-      {/* Self-hiding: renders only while a detected tool still needs its hooks
-          installed or approved, and never alongside the settings panel, which
-          embeds the same rows. */}
-      {!settingsOpen && <HooksPanel mode="onboarding" />}
 
       <AttentionPanel />
       <DigestPanel />
