@@ -50,14 +50,38 @@ function hashInput(text: string): string {
   return crypto.createHash("sha1").update(text).digest("hex");
 }
 
-/** Persist a failure so the UI can show it. Never stores the new hash — the next poll retries. */
-async function recordFailure(projectPath: string, cached: ProjectSummary | undefined, message: string): Promise<ProjectSummary> {
-  const summary: ProjectSummary = cached
-    ? { ...cached, lastError: message }
-    : { text: "", generatedAt: "", model: AI_MODEL, hash: "", lastError: message };
+/**
+ * The model's opt-out. Asking for a sentinel instead of prose is what keeps
+ * "I don't have enough evidence to say what's left to build" off the card: a
+ * fixed token we can detect beats a paragraph we can only display.
+ */
+const INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE";
+
+/**
+ * Whether the model opted out. Tolerant of the wrappers models add on their own
+ * — quotes, backticks, `**bold**` — and of a trailing explanation after the
+ * sentinel, but only when the reply *starts* with it: a real summary that
+ * happens to mention insufficient evidence mid-sentence is still a summary.
+ */
+export function isInsufficientEvidence(text: string): boolean {
+  const unwrapped = text.trim().replace(/^[\s"'`*_“‘]+/, "");
+  return unwrapped.toUpperCase().startsWith(INSUFFICIENT_EVIDENCE);
+}
+
+async function persist(projectPath: string, summary: ProjectSummary): Promise<ProjectSummary> {
   summariesDb.data[projectPath] = summary;
   await summariesDb.write();
   return summary;
+}
+
+/** Persist a failure so the UI can show it. Never stores the new hash — the next poll retries. */
+function recordFailure(projectPath: string, cached: ProjectSummary | undefined, message: string): Promise<ProjectSummary> {
+  return persist(
+    projectPath,
+    cached
+      ? { ...cached, lastError: message }
+      : { text: "", generatedAt: "", model: AI_MODEL, hash: "", lastError: message }
+  );
 }
 
 /**
@@ -95,6 +119,8 @@ export async function getOrGenerateSummary(project: Project, force = false): Pro
             "Weigh the evidence by what it proves: anything under ALREADY SHIPPED is finished, so never present it " +
             "as outstanding. Plans and session topics are what was intended or discussed, which is not proof it " +
             "shipped. If the docs and the commits disagree, trust the commits.\n\n" +
+            `If the evidence below isn't enough for a concrete, grounded sentence, reply with exactly ${INSUFFICIENT_EVIDENCE} ` +
+            "and nothing else — do not explain, hedge, or guess.\n\n" +
             context,
         },
       ],
@@ -109,16 +135,25 @@ export async function getOrGenerateSummary(project: Project, force = false): Pro
     await recordCall();
     if (!text) return cached;
 
-    const summary: ProjectSummary = {
+    // Store the sentinel verdict *with* the hash: the call is spent either way,
+    // so the point is not to spend another one until the evidence changes.
+    if (isInsufficientEvidence(text)) {
+      return persist(project.path, {
+        text: "",
+        generatedAt: new Date().toISOString(),
+        model: AI_MODEL,
+        hash,
+        insufficientEvidence: true,
+      });
+    }
+
+    return persist(project.path, {
       text,
       generatedAt: new Date().toISOString(),
       model: AI_MODEL,
       hash,
       lastError: undefined,
-    };
-    summariesDb.data[project.path] = summary;
-    await summariesDb.write();
-    return summary;
+    });
   } catch (err) {
     console.error("AI summary failed:", err);
     return recordFailure(project.path, cached, String((err as Error)?.message ?? err));

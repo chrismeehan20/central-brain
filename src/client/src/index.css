@@ -315,6 +315,16 @@ button.attention__item:focus-visible {
   color: var(--ink);
 }
 
+/* The deterministic "nothing moved" line — same quiet treatment as an empty
+   card summary, so it reads as a state rather than as content. */
+.digest__empty {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--muted);
+  font-style: italic;
+}
+
 .section {
   margin-bottom: 2.5rem;
 }
