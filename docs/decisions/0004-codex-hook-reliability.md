@@ -194,8 +194,8 @@ would be theatre:
 | 2 | Desired-state reconciliation + atomic writes & timestamped backups (D3) | ordinary | **merged** (#47) |
 | 3 | Installation identity + receipt-qualified liveness (D4) | ordinary | **merged** (#49) |
 | 4 | `inspectCodexHooks()` diagnostic status model (D5, D-C) | ordinary | **merged** (#50) |
-| 5 | Durable event delivery: spool + drain (D6) | hard | **in review** |
-| 6 | HooksPanel renders the status model, repair vs install | ordinary | pending |
+| 5 | Durable event delivery: spool + drain (D6) | hard | **merged** (#51) |
+| 6 | HooksPanel renders the status model, repair vs install | ordinary | **in review** |
 | 7 | Docs reconciliation: README + stale trust comments, close this record | simple | pending |
 
 Gate for every loop: `npm run typecheck && npm test && npm run build`, all
