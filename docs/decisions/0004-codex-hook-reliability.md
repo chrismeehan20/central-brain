@@ -82,6 +82,12 @@ handled or not worth building.
   would be a feature built for a user who does not exist. Dropped as a
   non-goal, consistent with the README already scoping the product to macOS.
 
+  Amended in Loop 4: *detecting* a Codex that has hooks switched off is kept,
+  because `[features] hooks = false` is ordinary user config, not enterprise
+  policy — and without it a correctly installed, correctly approved setup would
+  be told to run `/hooks` forever, to no effect. Detection only; nothing writes
+  to `config.toml`.
+
 - **D-B — No per-server auth token on hook posts.** The review wants a random
   token in the runtime manifest, checked on delivery. Nothing else on this
   server authenticates — it binds loopback and serves the whole dashboard API
@@ -168,8 +174,8 @@ parse. The forwarder always exits 0 and stays well inside Codex's 3s
 |---|---|---|---|
 | 1 | Stable forwarder location + runtime endpoint discovery (D1, D2) | ordinary | **merged** (#45) |
 | 2 | Desired-state reconciliation + atomic writes & timestamped backups (D3) | ordinary | **merged** (#47) |
-| 3 | Installation identity + receipt-qualified liveness (D4) | ordinary | **in review** |
-| 4 | `inspectCodexHooks()` diagnostic status model (D5, D-C) | ordinary | pending |
+| 3 | Installation identity + receipt-qualified liveness (D4) | ordinary | **merged** (#49) |
+| 4 | `inspectCodexHooks()` diagnostic status model (D5, D-C) | ordinary | **in review** |
 | 5 | Durable event delivery: spool + drain (D6) | hard | pending |
 | 6 | HooksPanel renders the status model, repair vs install | ordinary | pending |
 | 7 | Docs reconciliation: README + stale trust comments, close this record | simple | pending |

@@ -330,6 +330,44 @@ export interface HookToolStatus {
   lastEventAt?: string;
 }
 
+/**
+ * Every distinct thing that can be wrong with the Codex pipeline, where
+ * "distinct" means a different cause AND a different thing for the user to do.
+ * States the review proposed that collapse to identical copy, or that no code
+ * path can produce, are deliberately absent.
+ */
+export type CodexHooksOverall =
+  | "not_detected" // Codex isn't on this machine
+  | "config_error" // hooks.json is unreadable or the wrong shape
+  | "disabled" // Codex's own config switches hooks off
+  | "needs_install" // no entries of ours
+  | "needs_repair" // ours are present but not what this version installs
+  | "needs_review" // correct, but not approved inside Codex
+  | "waiting_for_verification" // correct and apparently approved; no event yet
+  | "connected" // an event from this install arrived recently
+  | "stale"; // verified once, but nothing recently
+
+export interface CodexHooksDiagnosis {
+  overall: CodexHooksOverall;
+  codexHome: string;
+  hooksPath: string;
+  forwarderPath: string;
+  /** Events with no entry of ours at all. */
+  missingEvents: string[];
+  /** Events whose entry of ours isn't the definition this version installs. */
+  staleEvents: string[];
+  duplicatedEvents: string[];
+  /**
+   * What `trusted_hash` suggests — a hint, never a verdict. Its location inside
+   * hook groups is current-Codex behaviour, not a documented contract, so a
+   * real event always outranks it.
+   */
+  approval: "approved" | "needs-review" | "unknown";
+  lastEventAt?: string;
+  /** Human-readable specifics for the panel; may be empty. */
+  diagnostics: string[];
+}
+
 export interface HooksSetupStatus {
   claude: HookToolStatus;
   /**
@@ -337,6 +375,6 @@ export interface HooksSetupStatus {
    * our hook groups in hooks.json carries the `trusted_hash` Codex stamps on
    * approval — the only proof short of a live event that our handlers can run.
    */
-  codex: HookToolStatus & { trusted: boolean };
+  codex: HookToolStatus & { trusted: boolean; diagnosis: CodexHooksDiagnosis };
   setupDismissed: boolean;
 }
