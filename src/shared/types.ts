@@ -9,6 +9,13 @@ export interface SessionRef {
   gitBranch?: string;
   entrypoint?: string; // e.g. "claude-vscode", "cli"
   transcriptPath?: string; // absent when the transcript file no longer exists
+  /**
+   * Set when repository grouping folded this session in from a sibling
+   * checkout: the directory the session actually ran in. Open/resume must use
+   * this over the card's primary path, or a worktree session resumes in the
+   * wrong working tree. Absent = the session lives at the project's own path.
+   */
+  checkoutPath?: string;
   // Codex only, from its own state DB (~/.codex/state_<n>.sqlite) — the rollout
   // files do not carry these.
   tokensUsed?: number;
