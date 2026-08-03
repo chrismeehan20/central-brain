@@ -688,6 +688,10 @@ button.attention__lead:focus-visible {
   white-space: nowrap;
 }
 
+.checkouts__ci-red {
+  color: var(--danger);
+}
+
 .checkouts__open {
   font-size: 0.7rem;
   padding: 0.1rem 0.5rem;

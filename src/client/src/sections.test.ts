@@ -210,3 +210,23 @@ test("CHIPS covers every ChipId exactly once, with a label and a title", () => {
   );
   for (const chip of CHIPS) assert.ok(chip.title.length > 0, `${chip.id} needs a title`);
 });
+
+test("a red sibling checkout makes the card need attention", () => {
+  const p = mk({
+    checkouts: [
+      { path: "/a", primary: true, sessionCount: 1 },
+      { path: "/b", primary: false, sessionCount: 1, ciStatus: "failure" },
+    ],
+  });
+  assert.equal(needsAttention(p), true);
+});
+
+test("a clean sibling checkout does not", () => {
+  const p = mk({
+    checkouts: [
+      { path: "/a", primary: true, sessionCount: 1 },
+      { path: "/b", primary: false, sessionCount: 1, ciStatus: "success", dirty: true },
+    ],
+  });
+  assert.equal(needsAttention(p), false);
+});
