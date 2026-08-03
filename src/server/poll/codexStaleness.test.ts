@@ -9,6 +9,7 @@ import type { AttentionStoreLike } from "../alert/attention.js";
 import type { ScannedSessions } from "../scan/codex.js";
 import { recordHookEvent, isHookLive, type LivenessStoreLike } from "../alert/hookLiveness.js";
 import { createStalenessContext, runStalenessPass } from "./codexStaleness.js";
+import { FORWARDER_REVISION } from "../hooks/forwarder.js";
 
 /**
  * The staleness pass is driven through an injected context: a fake scan over a
@@ -79,6 +80,13 @@ interface Harness {
   run: () => Promise<boolean>;
 }
 
+/**
+ * Liveness now requires proof from the CURRENT wiring, so a fabricated event
+ * has to carry a receipt the same way the real forwarder stamps one.
+ */
+const INSTALL_ID = "staleness-test-install";
+const RECEIPT = { installId: INSTALL_ID, forwarderRevision: FORWARDER_REVISION };
+
 function makeHarness(opts: {
   now: number;
   refs?: SessionRef[];
@@ -98,7 +106,7 @@ function makeHarness(opts: {
   const ctx = createStalenessContext({
     store,
     now: () => opts.now,
-    hooksLive: () => isHookLive("codex", { store: liveness, now: opts.now }),
+    hooksLive: () => isHookLive("codex", { store: liveness, now: opts.now, installId: INSTALL_ID }),
     scan: (): ScannedSessions => {
       harness.scanCalls += 1;
       return opts.refs && opts.refs.length > 0 ? { [PROJECT]: opts.refs } : {};
@@ -142,7 +150,7 @@ test("a recent Codex hook event stands the heuristic down and clears existing fl
     refs: [makeRollout("codex-1", 10 * 60_000, now)],
     items: [heuristicFlag("codex-1", new Date(now - 10 * 60_000).toISOString())],
   });
-  await recordHookEvent("codex", { store: h.liveness, now: now - 60 * 60_000 });
+  await recordHookEvent("codex", { store: h.liveness, now: now - 60 * 60_000, receipt: RECEIPT });
 
   const changed = await h.run();
 
@@ -167,7 +175,7 @@ test("standing down leaves real hook-created items alone", async () => {
     updatedAt: iso,
   };
   const h = makeHarness({ now, items: [permission, heuristicFlag("codex-2", iso)] });
-  await recordHookEvent("codex", { store: h.liveness, now });
+  await recordHookEvent("codex", { store: h.liveness, now, receipt: RECEIPT });
 
   await h.run();
 
@@ -177,7 +185,7 @@ test("standing down leaves real hook-created items alone", async () => {
 test("standing down with nothing to clear writes nothing", async () => {
   const now = Date.now();
   const h = makeHarness({ now, refs: [makeRollout("codex-1", 10 * 60_000, now)] });
-  await recordHookEvent("codex", { store: h.liveness, now });
+  await recordHookEvent("codex", { store: h.liveness, now, receipt: RECEIPT });
 
   assert.equal(await h.run(), false);
   assert.equal(h.store.writes, 0);
@@ -187,7 +195,7 @@ test("standing down with nothing to clear writes nothing", async () => {
 test("a Codex hook event older than the liveness window re-arms the heuristic", async () => {
   const now = Date.now();
   const h = makeHarness({ now, refs: [makeRollout("codex-1", 10 * 60_000, now)] });
-  await recordHookEvent("codex", { store: h.liveness, now: now - 8 * 24 * 60 * 60_000 });
+  await recordHookEvent("codex", { store: h.liveness, now: now - 8 * 24 * 60 * 60_000, receipt: RECEIPT });
 
   assert.equal(await h.run(), true);
   assert.equal(h.scanCalls, 1);

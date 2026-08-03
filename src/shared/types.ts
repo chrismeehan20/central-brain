@@ -223,6 +223,30 @@ export interface HookLiveness {
   live: boolean;
   lastEventAt?: string; // ISO; absent = a hook event has never been received
   windowMs: number; // how recent an event has to be to count as live
+  /**
+   * Why a recent event still didn't count. `stale-install` means it came from
+   * a previous generation of the wiring (the hooks were since reinstalled,
+   * repaired, or removed); `unsupported-forwarder` means it came from a script
+   * older than the one now installed. Absent when `live` is true, or when
+   * nothing has ever arrived.
+   */
+  disqualifiedBy?: "stale-install" | "unsupported-forwarder";
+}
+
+/**
+ * What the last hook event said about the wiring that produced it.
+ *
+ * Recorded so liveness can require proof from the CURRENT install rather than
+ * from any install: a timestamp alone reads the same whether events are
+ * arriving now or arrived once before the pipeline broke.
+ */
+export interface HookReceipt {
+  receivedAt: string; // ISO
+  eventName?: string;
+  /** Identity of the hook wiring in place when this fired; rotates on install/repair/uninstall. */
+  installId?: string;
+  /** The forwarder script's protocol revision. */
+  forwarderRevision?: string;
 }
 
 export interface HookEventPayload {

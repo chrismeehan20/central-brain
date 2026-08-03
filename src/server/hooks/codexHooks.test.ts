@@ -32,6 +32,14 @@ after(() => {
 const COMMAND = 'sh "/somewhere/central-brain/hooks/notify-codex.sh"';
 
 /**
+ * Install and uninstall rotate the install id, which lives in the data dir.
+ * Pointing every call in this file at a throwaway one keeps the developer's
+ * real ~/Library/Application Support/central-brain out of the test run.
+ */
+const DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "central-brain-codex-hooks-data-"));
+after(() => fs.rmSync(DATA_DIR, { recursive: true, force: true }));
+
+/**
  * A handler in the exact shape of the Better Peacock entries that are really in
  * ~/.codex/hooks.json — no `matcher` key, with `timeout` and `statusMessage`.
  * These must come out the far side of install + uninstall untouched.
@@ -81,7 +89,7 @@ function ourEntries(config: CodexHooksConfig, event: string) {
 }
 
 function install(file: string) {
-  return installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
+  return installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
 }
 
 test("installing preserves foreign handlers exactly and appends ours for every event", () => {
@@ -131,7 +139,7 @@ test("uninstalling removes only our entries and restores the file we found", () 
   const { file, original } = foreignFixture();
 
   install(file);
-  const result = uninstallCodexHooks({ hooksPath: file, log: () => {} });
+  const result = uninstallCodexHooks({ hooksPath: file, log: () => {}, dataDir: DATA_DIR });
 
   assert.equal(result.removed, CODEX_HOOK_EVENTS.length);
   assert.equal(result.wrote, true);
@@ -141,7 +149,7 @@ test("uninstalling removes only our entries and restores the file we found", () 
 test("uninstalling a config that has no entries of ours changes nothing", () => {
   const { file, original } = foreignFixture();
 
-  const result = uninstallCodexHooks({ hooksPath: file, log: () => {} });
+  const result = uninstallCodexHooks({ hooksPath: file, log: () => {}, dataDir: DATA_DIR });
 
   assert.equal(result.removed, 0);
   assert.equal(result.wrote, false);
@@ -168,7 +176,7 @@ test("uninstalling keeps a foreign handler that shares a group with ours", () =>
     ) + "\n"
   );
 
-  const result = uninstallCodexHooks({ hooksPath: file, log: () => {} });
+  const result = uninstallCodexHooks({ hooksPath: file, log: () => {}, dataDir: DATA_DIR });
 
   assert.equal(result.removed, 1);
   assert.deepEqual(read(file).hooks!.Stop, [foreignGroup()]);
@@ -226,7 +234,7 @@ test("codexHooksPath prefers CODEX_HOME over the home directory", () => {
 /** Install ours into a fresh fixture, then optionally stamp trusted_hash the way Codex does on approval. */
 function installedFixture(stamp: { ours?: boolean; foreign?: boolean } = {}): string {
   const file = fixture(JSON.stringify({ hooks: { UserPromptSubmit: [foreignGroup()] } }));
-  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
+  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
   const config = JSON.parse(fs.readFileSync(file, "utf8")) as CodexHooksConfig;
   for (const groups of Object.values(config.hooks ?? {})) {
     for (const group of groups) {
@@ -270,7 +278,7 @@ test("install preserves a foreign group's trusted_hash and never stamps our own"
   const file = fixture(
     JSON.stringify({ hooks: { UserPromptSubmit: [{ ...foreignGroup(), trusted_hash: "keepme" }] } })
   );
-  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
+  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
   const config = JSON.parse(fs.readFileSync(file, "utf8")) as CodexHooksConfig;
   const groups = config.hooks?.UserPromptSubmit ?? [];
   assert.equal(groups[0].trusted_hash, "keepme");
@@ -280,7 +288,7 @@ test("install preserves a foreign group's trusted_hash and never stamps our own"
 
 test("SessionEnd declares the 3s timeout Codex actually enforces; other events keep 10s", () => {
   const file = fixture("");
-  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
+  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
   const config = JSON.parse(fs.readFileSync(file, "utf8")) as CodexHooksConfig;
   const timeoutFor = (event: string) =>
     (config.hooks?.[event] ?? []).flatMap((g) => g.hooks ?? []).find((h) => h.command === COMMAND)
@@ -324,7 +332,7 @@ function staleFixture(command = STALE_COMMAND): string {
 test("a stale command is repaired, not reported as already installed", () => {
   const file = staleFixture();
 
-  const result = installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
+  const result = installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
 
   assert.deepEqual(result.updated, [...CODEX_HOOK_EVENTS]);
   assert.deepEqual(result.added, []);
@@ -347,7 +355,7 @@ test("a stale command is repaired, not reported as already installed", () => {
 
 test("a repaired definition drops the trusted_hash that approved the old one", () => {
   const file = staleFixture();
-  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
+  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
 
   // Leaving the old hash behind would make codexHooksTrusted() report an
   // approval the user never gave for this command.
@@ -366,7 +374,7 @@ test("codexHooksInstalled is false for a stale command and true only for the cur
   const file = staleFixture();
   assert.equal(codexHooksInstalled(file, CODEX_HOOK_EVENTS, COMMAND), false);
 
-  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
+  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
   assert.equal(codexHooksInstalled(file, CODEX_HOOK_EVENTS, COMMAND), true);
 
   // The same file read against a *different* desired command is stale again —
@@ -386,6 +394,7 @@ test("an entry that differs only by timeout or status message is still repaired"
       command: COMMAND,
       events: ["PermissionRequest"],
       log: () => {},
+      dataDir: DATA_DIR,
     });
     assert.deepEqual(result.updated, ["PermissionRequest"], `drift ${JSON.stringify(drift)}`);
     assert.deepEqual(ourEntries(read(file), "PermissionRequest"), [
@@ -419,6 +428,7 @@ test("duplicate entries of ours collapse to exactly one, keeping foreign groups"
     command: COMMAND,
     events: ["PermissionRequest"],
     log: () => {},
+    dataDir: DATA_DIR,
   });
 
   assert.deepEqual(result.deduplicated, ["PermissionRequest"]);
@@ -445,7 +455,7 @@ test("one of our entries hand-merged into a foreign group is lifted out, not del
     })
   );
 
-  installCodexHooks({ hooksPath: file, command: COMMAND, events: ["Stop"], log: () => {} });
+  installCodexHooks({ hooksPath: file, command: COMMAND, events: ["Stop"], log: () => {}, dataDir: DATA_DIR });
 
   const groups = read(file).hooks!.Stop;
   // Their handler and their approval survive; ours moves to its own group.
@@ -458,14 +468,14 @@ test("one of our entries hand-merged into a foreign group is lifted out, not del
 
 test("an already-current install is left byte-for-byte alone, approval included", () => {
   const file = fixture("");
-  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
+  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
   // Simulate the user approving in Codex.
   const approved = read(file);
   for (const event of CODEX_HOOK_EVENTS) approved.hooks![event][0].trusted_hash = `hash-${event}`;
   const bytes = JSON.stringify(approved, null, 2) + "\n";
   fs.writeFileSync(file, bytes);
 
-  const result = installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
+  const result = installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
 
   assert.equal(result.wrote, false);
   assert.equal(result.requiresReapproval, false);
@@ -475,10 +485,10 @@ test("an already-current install is left byte-for-byte alone, approval included"
 
 test("repeated repair is idempotent — the second run writes nothing", () => {
   const file = staleFixture();
-  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
+  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
   const after = fs.readFileSync(file, "utf8");
 
-  const second = installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
+  const second = installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
 
   assert.equal(second.wrote, false);
   assert.equal(fs.readFileSync(file, "utf8"), after);
@@ -486,9 +496,9 @@ test("repeated repair is idempotent — the second run writes nothing", () => {
 
 test("uninstall removes repaired entries as cleanly as freshly installed ones", () => {
   const file = staleFixture();
-  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
+  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
 
-  const result = uninstallCodexHooks({ hooksPath: file, log: () => {} });
+  const result = uninstallCodexHooks({ hooksPath: file, log: () => {}, dataDir: DATA_DIR });
 
   assert.equal(result.removed, CODEX_HOOK_EVENTS.length);
   assert.deepEqual(read(file).hooks ?? {}, {});
@@ -498,8 +508,8 @@ test("each write keeps its own backup instead of overwriting one .bak", () => {
   const file = staleFixture();
   const dir = path.dirname(file);
 
-  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
-  installCodexHooks({ hooksPath: file, command: 'sh "/another/notify-codex.sh"', log: () => {} });
+  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
+  installCodexHooks({ hooksPath: file, command: 'sh "/another/notify-codex.sh"', log: () => {}, dataDir: DATA_DIR });
 
   const backups = fs.readdirSync(dir).filter((n) => n.endsWith(".bak"));
   assert.equal(backups.length, 2, "the pre-install snapshot must survive a second install");
@@ -512,7 +522,7 @@ test("backups are pruned to the five most recent", () => {
   const file = fixture("{}");
   const dir = path.dirname(file);
   for (let i = 0; i < 8; i++) {
-    installCodexHooks({ hooksPath: file, command: `sh "/v${i}/notify-codex.sh"`, log: () => {} });
+    installCodexHooks({ hooksPath: file, command: `sh "/v${i}/notify-codex.sh"`, log: () => {}, dataDir: DATA_DIR });
   }
   assert.equal(fs.readdirSync(dir).filter((n) => n.endsWith(".bak")).length, 5);
 });
@@ -530,7 +540,7 @@ test("a hooks.json edited mid-reconcile is retried, then refused", () => {
   };
 
   assert.throws(
-    () => installCodexHooks({ hooksPath: file, command: COMMAND, log: editOnLog }),
+    () => installCodexHooks({ hooksPath: file, command: COMMAND, log: editOnLog, dataDir: DATA_DIR }),
     (err: unknown) => err instanceof CodexHooksConflictError
   );
   // Refused, not half-written: the file is still someone's edit, still valid JSON.
@@ -553,7 +563,7 @@ test("an install interrupted by a concurrent edit retries and succeeds", () => {
     fs.writeFileSync(file, original.replace("old-checkout", "moved-once"));
   };
 
-  const result = installCodexHooks({ hooksPath: file, command: COMMAND, log: editOnce });
+  const result = installCodexHooks({ hooksPath: file, command: COMMAND, log: editOnce, dataDir: DATA_DIR });
 
   assert.equal(result.wrote, true);
   assert.deepEqual(result.updated, [...CODEX_HOOK_EVENTS]);
@@ -567,7 +577,7 @@ test("pruning never deletes a backup someone made by hand", () => {
   fs.writeFileSync(manual, "{}");
 
   for (let i = 0; i < 8; i++) {
-    installCodexHooks({ hooksPath: file, command: `sh "/v${i}/notify-codex.sh"`, log: () => {} });
+    installCodexHooks({ hooksPath: file, command: `sh "/v${i}/notify-codex.sh"`, log: () => {}, dataDir: DATA_DIR });
   }
 
   assert.equal(fs.existsSync(manual), true);

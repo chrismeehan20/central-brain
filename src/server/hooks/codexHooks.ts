@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { codexForwarderPath, installCodexForwarder, shellQuote } from "./forwarder.js";
+import { codexForwarderPath, installCodexForwarder, rotateInstallId, shellQuote } from "./forwarder.js";
 
 /**
  * Install/uninstall logic for Codex's ~/.codex/hooks.json, factored out of the
@@ -383,6 +383,11 @@ export interface CodexHooksOptions {
   command?: string;
   events?: readonly string[];
   log?: Logger;
+  /**
+   * Where the install id lives. Defaults to the resolved data dir; tests pass
+   * a temp dir so rotating one never touches the developer's real install.
+   */
+  dataDir?: string;
 }
 
 export interface InstallResult {
@@ -517,6 +522,12 @@ export function installCodexHooks(opts: CodexHooksOptions): InstallResult {
       throw err;
     }
 
+    // The definitions changed, so every receipt collected under the old ones
+    // stops counting. Without this, a repair would inherit "Connected" from
+    // events the previous, broken wiring produced — and the user would never
+    // learn that the repair still needs approving.
+    rotateInstallId({ ...(opts.dataDir ? { dataDir: opts.dataDir } : {}) });
+
     if (added.length > 0) log(`Installed central-brain Codex hooks for: ${added.join(", ")}`);
     if (updated.length > 0) {
       log(`Repaired stale central-brain hook definitions for: ${updated.join(", ")}`);
@@ -595,6 +606,10 @@ export function uninstallCodexHooks(opts: Omit<CodexHooksOptions, "command" | "e
 
   const backupPath = raw !== undefined ? backup(hooksPath, raw, log) : undefined;
   writeConfig(hooksPath, config, stat);
+  // Nothing can fire any more, so no past event may keep vouching for the
+  // pipeline — this is what stops the dashboard reading "Connected" for days
+  // after an uninstall.
+  rotateInstallId({ ...(opts.dataDir ? { dataDir: opts.dataDir } : {}) });
   log(`Removed ${removed} central-brain Codex hook entr${removed === 1 ? "y" : "ies"}. Your other Codex hooks were left untouched.`);
   log("Your other hooks keep their approval: Codex trusts each hook definition");
   log("separately, and none of theirs changed.");
