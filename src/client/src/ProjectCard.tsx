@@ -89,7 +89,28 @@ export default function ProjectCard({
       title: "This folder no longer exists on disk (moved or deleted)",
     });
   }
-  if (ci === "failure") flags.push({ kind: "failing", label: "CI failing" });
+  if (ci === "failure") {
+    flags.push({
+      kind: "failing",
+      title: `CI is red on ${project.github?.branch ?? "the current branch"} — the code you have checked out is broken`,
+      label: "CI failing",
+    });
+  }
+  /**
+   * Kept separate from the branch flag on purpose: red CI on your branch means
+   * go fix the code in front of you, while a red open PR means go look at
+   * something you already pushed. Same colour family, different call to action.
+   */
+  const prFailing = (project.github?.openPrs ?? []).some(
+    (pr) => !pr.isDraft && pr.ciStatus?.toLowerCase() === "failure"
+  );
+  if (prFailing) {
+    flags.push({
+      kind: "pr-failing",
+      title: "At least one open (non-draft) PR has failing checks",
+      label: "PR checks failing",
+    });
+  }
 
   const prCount = project.github?.openPrs?.length ?? 0;
   const meta = [
@@ -102,6 +123,8 @@ export default function ProjectCard({
         : project.github.branch
       : "",
     prCount > 0 ? `${prCount} open PR${prCount === 1 ? "" : "s"}` : "",
+    // Current-branch CI when it isn't red — "CI success" / "CI pending". Red
+    // gets promoted out of this quiet line and into a flag above.
     ci && ci !== "failure" ? `CI ${ci}` : "",
   ].filter(Boolean);
 
