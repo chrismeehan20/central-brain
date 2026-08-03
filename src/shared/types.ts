@@ -364,6 +364,12 @@ export interface CodexHooksDiagnosis {
    */
   approval: "approved" | "needs-review" | "unknown";
   lastEventAt?: string;
+  /**
+   * Events waiting to be replayed because delivery failed, and events we could
+   * not parse. A pending count that keeps climbing means the server is not
+   * draining, which is otherwise completely invisible.
+   */
+  spool?: { pending: number; quarantined: number };
   /** Human-readable specifics for the panel; may be empty. */
   diagnostics: string[];
 }

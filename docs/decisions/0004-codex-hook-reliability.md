@@ -168,6 +168,24 @@ periodically, deduplicating by delivery id and quarantining what it cannot
 parse. The forwarder always exits 0 and stays well inside Codex's 3s
 `SessionEnd` budget. This closes 0001's D1.
 
+Two deliberate departures from the review's spec, both because the alternative
+would be theatre:
+
+- **No delivery-id deduplication.** The only case that can duplicate is a
+  request the server acted on before the connection dropped, which the
+  forwarder then spools. `handleHookEvent` is already idempotent for exactly
+  those events — attention items upsert by `<session>:<kind>` and clearing
+  events filter by session — so a replay converges rather than stacks. An
+  in-process id set could not catch that case regardless, since the replay
+  usually happens in a later process.
+- **Replayed events do not refresh liveness.** A spooled event proves the
+  forwarder ran at some past moment and, by having needed spooling at all,
+  proves the live path was *not* working. Counting it as proof that the
+  pipeline works right now would rebuild the exact lie D4 removed. Replays also
+  fire no desktop notification: returning from a ten-minute outage with a dozen
+  simultaneous pings, for decisions mostly already made, is worse than silence.
+  The attention rows still appear.
+
 ## Queue
 
 | Loop | Item | Tier | Status |
@@ -175,8 +193,8 @@ parse. The forwarder always exits 0 and stays well inside Codex's 3s
 | 1 | Stable forwarder location + runtime endpoint discovery (D1, D2) | ordinary | **merged** (#45) |
 | 2 | Desired-state reconciliation + atomic writes & timestamped backups (D3) | ordinary | **merged** (#47) |
 | 3 | Installation identity + receipt-qualified liveness (D4) | ordinary | **merged** (#49) |
-| 4 | `inspectCodexHooks()` diagnostic status model (D5, D-C) | ordinary | **in review** |
-| 5 | Durable event delivery: spool + drain (D6) | hard | pending |
+| 4 | `inspectCodexHooks()` diagnostic status model (D5, D-C) | ordinary | **merged** (#50) |
+| 5 | Durable event delivery: spool + drain (D6) | hard | **in review** |
 | 6 | HooksPanel renders the status model, repair vs install | ordinary | pending |
 | 7 | Docs reconciliation: README + stale trust comments, close this record | simple | pending |
 

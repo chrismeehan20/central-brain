@@ -35,6 +35,8 @@ export interface CodexHooksInspection {
   liveness: HookLiveness;
   /** Raw `$CODEX_HOME/config.toml`, when it exists. Undefined = no file. */
   configToml?: string;
+  /** Offline-spool backlog, surfaced so a growing queue is visible rather than silent. */
+  spool?: { pending: number; quarantined: number };
 }
 
 /**
@@ -131,6 +133,7 @@ export function inspectCodexHooks(input: CodexHooksInspection): CodexHooksDiagno
     duplicatedEvents: [] as string[],
     approval: "unknown" as CodexHooksDiagnosis["approval"],
     ...(input.liveness.lastEventAt ? { lastEventAt: input.liveness.lastEventAt } : {}),
+    ...(input.spool ? { spool: input.spool } : {}),
   };
 
   if (!input.codexDirExists) {

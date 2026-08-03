@@ -18,6 +18,7 @@ import {
 } from "../hooks/codexHooks.js";
 import { inspectCodexHooks } from "../hooks/codexHooksStatus.js";
 import { codexForwarderPath, ForwarderInstallError } from "../hooks/forwarder.js";
+import { spoolCounts } from "../hooks/spool.js";
 import { getHookLiveness } from "../alert/hookLiveness.js";
 import { settingsDb, writeSettings } from "../store/db.js";
 
@@ -51,6 +52,7 @@ export function buildHooksStatus(): HooksSetupStatus {
     forwarderPath: codexForwarderPath(),
     command: buildCodexHookCommand(),
     liveness: codexLiveness,
+    spool: spoolCounts(),
     ...(codexDirExists ? { configToml: readCodexConfigToml(codexHome) } : {}),
   });
   return {

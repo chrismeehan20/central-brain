@@ -256,3 +256,139 @@ test("no install id yet still delivers, simply without the id header", async () 
   assert.equal(received[0].installId, undefined);
   assert.equal(received[0].forwarderRevision, FORWARDER_REVISION);
 });
+
+/**
+ * Spooling — the half of durable delivery that only the real shell can prove.
+ *
+ * 0001's D1 named lost push signals as the cost of the app owning the server's
+ * lifetime, and ratified spooling to close it. These assert the forwarder
+ * actually keeps what it cannot deliver, and drops what it should not keep.
+ */
+
+function pendingFiles(dataDir: string): string[] {
+  try {
+    return fs.readdirSync(path.join(dataDir, "spool", "pending"));
+  } catch {
+    return [];
+  }
+}
+
+function installed(dataDir: string): string {
+  return installCodexForwarder({
+    dataDir,
+    sourcePath: resolveNotifyScript({ name: CODEX_FORWARDER_NAME, env: {} }),
+  }).path;
+}
+
+test("an event delivered successfully leaves nothing behind", async () => {
+  const dataDir = tempDir("cb-script-data-");
+  const { origin, received } = await receiver();
+  writeRuntimeEndpoint(origin, { dataDir });
+
+  await runScript(installed(dataDir), {});
+
+  assert.equal(received.length, 1);
+  assert.deepEqual(pendingFiles(dataDir), [], "a delivered event must not also be spooled");
+  // And no staging file is left in the spool root either.
+  assert.deepEqual(
+    fs.readdirSync(path.join(dataDir, "spool")).filter((n) => n.startsWith("tmp.")),
+    []
+  );
+});
+
+test("an event that cannot be delivered is kept for replay", async () => {
+  const dataDir = tempDir("cb-script-data-");
+  const { origin } = await receiver();
+  await new Promise((resolve) => servers[servers.length - 1].close(resolve)); // nothing listening
+  writeRuntimeEndpoint(origin, { dataDir });
+
+  assert.equal(await runScript(installed(dataDir), {}), 0);
+
+  const pending = pendingFiles(dataDir);
+  assert.equal(pending.length, 1);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir, "spool", "pending", pending[0]), "utf8")).session_id, "s1");
+  // Payloads can carry tool arguments, so the file must be ours alone.
+  assert.equal(fs.statSync(path.join(dataDir, "spool", "pending", pending[0])).mode & 0o777, 0o600);
+});
+
+test("a server that answers with an error spools too", async () => {
+  const dataDir = tempDir("cb-script-data-");
+  const server = http.createServer((_req, res) => {
+    res.writeHead(500);
+    res.end("nope");
+  });
+  servers.push(server);
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  writeRuntimeEndpoint(`http://127.0.0.1:${(server.address() as AddressInfo).port}`, { dataDir });
+
+  assert.equal(await runScript(installed(dataDir), {}), 0);
+
+  assert.equal(pendingFiles(dataDir).length, 1, "a 5xx is a failed delivery, not a delivered one");
+});
+
+test("each undelivered event gets its own file", async () => {
+  const dataDir = tempDir("cb-script-data-");
+  writeRuntimeEndpoint("http://127.0.0.1:1", { dataDir }); // nothing will ever listen here
+  const script = installed(dataDir);
+
+  await Promise.all([runScript(script, {}), runScript(script, {}), runScript(script, {})]);
+
+  // One file per event: appending to a shared log would interleave concurrent
+  // hooks and make partial writes unparseable.
+  assert.equal(pendingFiles(dataDir).length, 3);
+});
+
+test("an oversized payload is dropped rather than spooled", async () => {
+  const dataDir = tempDir("cb-script-data-");
+  writeRuntimeEndpoint("http://127.0.0.1:1", { dataDir });
+  const script = installed(dataDir);
+
+  const child = spawn("/bin/sh", [script], {
+    env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: tempDir("cb-fake-home-") },
+    stdio: ["pipe", "ignore", "ignore"],
+  });
+  child.stdin.end(JSON.stringify({ session_id: "s1", hook_event_name: "Stop", pad: "x".repeat(300_000) }));
+  const [code] = (await once(child, "close")) as [number | null];
+
+  assert.equal(code, 0);
+  assert.deepEqual(pendingFiles(dataDir), [], "spooling this would be a way to fill a disk one event at a time");
+});
+
+test("an empty payload is dropped rather than spooled", async () => {
+  const dataDir = tempDir("cb-script-data-");
+  writeRuntimeEndpoint("http://127.0.0.1:1", { dataDir });
+  const script = installed(dataDir);
+
+  const child = spawn("/bin/sh", [script], {
+    env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: tempDir("cb-fake-home-") },
+    stdio: ["pipe", "ignore", "ignore"],
+  });
+  child.stdin.end("");
+  const [code] = (await once(child, "close")) as [number | null];
+
+  assert.equal(code, 0);
+  assert.deepEqual(pendingFiles(dataDir), []);
+});
+
+test("spooling still finishes inside Codex's 3s SessionEnd budget", async () => {
+  const dataDir = tempDir("cb-script-data-");
+  writeRuntimeEndpoint("http://127.0.0.1:1", { dataDir });
+  const script = installed(dataDir);
+
+  const started = Date.now();
+  await runScript(script, {});
+  // The failure path is the slow one — it pays a connection attempt before it
+  // spools — so it is the one that has to fit the budget.
+  assert.ok(Date.now() - started < 2000, `spooling took ${Date.now() - started}ms`);
+});
+
+test("a spooled event is exactly what the server would have received", async () => {
+  const dataDir = tempDir("cb-script-data-");
+  writeRuntimeEndpoint("http://127.0.0.1:1", { dataDir });
+
+  await runScript(installed(dataDir), {});
+
+  const [name] = pendingFiles(dataDir);
+  assert.equal(fs.readFileSync(path.join(dataDir, "spool", "pending", name), "utf8"), PAYLOAD);
+});
