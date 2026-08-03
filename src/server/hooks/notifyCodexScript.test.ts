@@ -73,6 +73,18 @@ async function receiver(): Promise<{ origin: string; received: Received[] }> {
 
 const PAYLOAD = JSON.stringify({ session_id: "s1", hook_event_name: "SessionStart" });
 
+/**
+ * The forwarder caps how much of stdin it reads, so for an oversized payload
+ * it closes the pipe while we are still writing — which is the behaviour we
+ * want, and which surfaces here as EPIPE. Whether it happens at all depends on
+ * pipe buffer size and timing, so it passed on macOS and failed on CI.
+ */
+function ignoreEpipe(stream: NodeJS.WritableStream): void {
+  stream.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code !== "EPIPE") throw err;
+  });
+}
+
 /** Run the script with `payload` on stdin, and a deliberately bare environment. */
 async function runScript(scriptPath: string, env: Record<string, string>): Promise<number> {
   const child = spawn("/bin/sh", [scriptPath], {
@@ -81,6 +93,7 @@ async function runScript(scriptPath: string, env: Record<string, string>): Promi
     env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: tempDir("cb-fake-home-"), ...env },
     stdio: ["pipe", "ignore", "ignore"],
   });
+  ignoreEpipe(child.stdin);
   child.stdin.end(PAYLOAD);
   const [code] = (await once(child, "close")) as [number | null];
   return code ?? -1;
@@ -348,6 +361,7 @@ test("an oversized payload is dropped rather than spooled", async () => {
     env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: tempDir("cb-fake-home-") },
     stdio: ["pipe", "ignore", "ignore"],
   });
+  ignoreEpipe(child.stdin);
   child.stdin.end(JSON.stringify({ session_id: "s1", hook_event_name: "Stop", pad: "x".repeat(300_000) }));
   const [code] = (await once(child, "close")) as [number | null];
 
@@ -364,6 +378,7 @@ test("an empty payload is dropped rather than spooled", async () => {
     env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: tempDir("cb-fake-home-") },
     stdio: ["pipe", "ignore", "ignore"],
   });
+  ignoreEpipe(child.stdin);
   child.stdin.end("");
   const [code] = (await once(child, "close")) as [number | null];
 
