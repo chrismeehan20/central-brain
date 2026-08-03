@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Central Brain, know the moment an agent is waiting on you</title>
+    <meta
+      name="description"
+      content="A local macOS dashboard for running more AI coding agents than you can keep an eye on. It finds your projects on its own, watches every Claude Code and Codex session, and tells you the second one stops and waits for a decision. Open source, beta."
+    />
+    <link rel="canonical" href="https://centralbrain.secondbell.app/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://centralbrain.secondbell.app/" />
+    <meta property="og:title" content="Central Brain, know the moment an agent is waiting on you" />
+    <meta
+      property="og:description"
+      content="A local macOS dashboard for running more AI coding agents than you can keep an eye on. Open source, beta."
+    />
+    <meta property="og:image" content="https://centralbrain.secondbell.app/dashboard.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- The app's own mark, so the tab icon and the menubar icon are one thing. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect width='22' height='22' rx='5' fill='%230b0e14'/%3E%3Cg fill='none' stroke='%237dd3fc' stroke-width='1.85' stroke-linejoin='round'%3E%3Crect x='6.2' y='2.5' width='9.6' height='3.4' rx='1.7'/%3E%3Crect x='4.4' y='8.65' width='13.2' height='3.9' rx='1.95'/%3E%3C/g%3E%3Crect x='2.5' y='14.4' width='17' height='5.6' rx='2.4' fill='%237dd3fc'/%3E%3C/svg%3E"
+    />
+
+    <link rel="preconnect" href="https://api.fontshare.com" />
+    <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin />
+    <link
+      href="https://api.fontshare.com/v2/css?f%5B%5D=satoshi@400,500,700,900&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      /*
+        Palette is lifted verbatim from the app's own tokens
+        (src/client/src/index.css and src-tauri/icons/src/app-icon.svg) so the
+        page and the product read as one thing rather than two designs.
+
+        The layout system is the tray mark itself: three stacked slabs whose
+        widths run 9.6 : 13.2 : 17 in the icon's own coordinates, which is
+        56.5% : 77.6% : 100%. Every measure on this page is one of those three.
+      */
+      :root {
+        --ground: #0b0e14;
+        --surface: #12161f;
+        --raised: #171c28;
+        --line: #262c3a;
+        --line-bright: #3a4256;
+        --ink: #e6e9f0;
+        --muted: #8891a7;
+        --sky: #7dd3fc;
+        --amber: #f5b942;
+
+        --slab-1: 34rem; /* 56.7% */
+        --slab-2: 46rem; /* 76.7% */
+        --slab-3: 60rem; /* 100%  */
+
+        --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background: var(--ground);
+        color: var(--ink);
+        font-family: "Satoshi", system-ui, -apple-system, sans-serif;
+        font-size: 17px;
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Sentence case everywhere, never title case. */
+      h1,
+      h2,
+      h3 {
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: -0.021em;
+        margin: 0;
+        text-wrap: balance;
+      }
+
+      p {
+        margin: 0;
+        text-wrap: pretty;
+      }
+
+      a {
+        color: var(--sky);
+        text-underline-offset: 3px;
+        text-decoration-thickness: 1px;
+      }
+
+      a:hover {
+        color: #a5e2fd;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--sky);
+        outline-offset: 3px;
+        border-radius: 3px;
+      }
+
+      code {
+        font-family: var(--mono);
+        font-size: 0.92em;
+        color: var(--ink);
+      }
+
+      .shell {
+        width: min(var(--slab-3), 100% - 3rem);
+        margin-inline: auto;
+      }
+
+      .skip {
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        background: var(--sky);
+        color: var(--ground);
+        padding: 0.6rem 1rem;
+        font-weight: 700;
+        z-index: 10;
+      }
+
+      .skip:focus {
+        left: 1rem;
+        top: 1rem;
+      }
+
+      /* ---------- masthead ---------- */
+
+      .masthead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1.75rem 0 0;
+      }
+
+      .wordmark {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+        text-decoration: none;
+      }
+
+      .wordmark svg {
+        width: 24px;
+        height: 24px;
+        display: block;
+      }
+
+      .masthead nav {
+        display: flex;
+        gap: 1.5rem;
+        font-size: 0.94rem;
+      }
+
+      .masthead nav a {
+        color: var(--muted);
+        text-decoration: none;
+      }
+
+      .masthead nav a:hover {
+        color: var(--ink);
+      }
+
+      /* ---------- hero ---------- */
+
+      .hero {
+        padding: 5.5rem 0 0;
+      }
+
+      .beta-flag {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.55rem;
+        font-size: 0.85rem;
+        color: var(--amber);
+        font-weight: 500;
+        margin-bottom: 1.5rem;
+      }
+
+      .beta-flag b {
+        font-weight: 900;
+        letter-spacing: 0.02em;
+      }
+
+      .beta-flag span {
+        color: var(--muted);
+        font-weight: 400;
+      }
+
+      h1 {
+        font-size: clamp(2.4rem, 6vw, 3.9rem);
+        font-weight: 900;
+        max-width: var(--slab-2);
+      }
+
+      .lede {
+        max-width: var(--slab-1);
+        margin-top: 1.4rem;
+        color: var(--muted);
+        font-size: 1.12rem;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.9rem 1.4rem;
+        margin-top: 2.4rem;
+      }
+
+      .install-cmd {
+        display: inline-block;
+        font-family: var(--mono);
+        font-size: 0.95rem;
+        background: var(--surface);
+        border: 1px solid var(--line-bright);
+        color: var(--ink);
+        padding: 0.85rem 1.15rem;
+        border-radius: 6px;
+        user-select: all;
+      }
+
+      .install-cmd::before {
+        content: "$ ";
+        color: var(--muted);
+      }
+
+      .ghost {
+        color: var(--muted);
+        text-decoration: none;
+        font-weight: 500;
+        border-bottom: 1px solid var(--line-bright);
+        padding-bottom: 2px;
+      }
+
+      .ghost:hover {
+        color: var(--ink);
+        border-color: var(--sky);
+      }
+
+      .runs-local {
+        margin-top: 1.5rem;
+        font-size: 0.92rem;
+        color: var(--muted);
+        max-width: var(--slab-1);
+      }
+
+      /* ---------- the signature: the tray mark as an agent stack ---------- */
+
+      .stack {
+        margin: 4.5rem 0 0;
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .slab {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem 1.5rem;
+        border-radius: 18px;
+        font-size: 0.95rem;
+      }
+
+      .slab--quiet {
+        width: 56.5%;
+        border: 1.5px solid var(--line-bright);
+        color: var(--muted);
+      }
+
+      .slab--quiet + .slab--quiet {
+        width: 77.6%;
+      }
+
+      .slab--lit {
+        width: 100%;
+        background: var(--amber);
+        color: #2a1f04;
+        font-weight: 700;
+        border: 1.5px solid var(--amber);
+      }
+
+      .slab .name {
+        font-family: var(--mono);
+        font-size: 0.9rem;
+      }
+
+      .slab--lit .state {
+        font-weight: 700;
+      }
+
+      @media (max-width: 640px) {
+        .slab--quiet,
+        .slab--quiet + .slab--quiet {
+          width: 100%;
+        }
+      }
+
+      /* ---------- screenshot, the only boxed thing on the page ---------- */
+
+      .shot {
+        margin-top: 5rem;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+        background: var(--surface);
+        line-height: 0;
+      }
+
+      .shot img {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+
+      .shot-note {
+        margin-top: 0.85rem;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      /* ---------- prose sections ---------- */
+
+      section {
+        padding: 6rem 0 0;
+      }
+
+      h2 {
+        font-size: clamp(1.6rem, 3.4vw, 2.1rem);
+        max-width: var(--slab-2);
+      }
+
+      .section-lede {
+        max-width: var(--slab-1);
+        margin-top: 1.2rem;
+        color: var(--muted);
+      }
+
+      .problem .opening,
+      .problem .resolve {
+        max-width: var(--slab-2);
+        color: var(--muted);
+        font-size: 1.12rem;
+      }
+
+      .problem .opening {
+        margin-top: 1.2rem;
+      }
+
+      /* The thesis gets the narrow measure and the only full-strength ink. */
+      .problem .punch {
+        max-width: var(--slab-1);
+        margin-top: 1.6rem;
+        font-weight: 700;
+        font-size: 1.35rem;
+        color: var(--ink);
+      }
+
+      .problem .resolve {
+        margin-top: 1.3rem;
+      }
+
+      /*
+        No cards. The features are one column of hairline-ruled rows whose
+        measures step through the three slab widths, so the mark's silhouette
+        gets drawn down the length of the page by the rules themselves.
+      */
+      .features {
+        margin-top: 3rem;
+        display: grid;
+      }
+
+      .feature {
+        padding: 2rem 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .feature:nth-child(3n + 1) {
+        max-width: var(--slab-1);
+      }
+
+      .feature:nth-child(3n + 2) {
+        max-width: var(--slab-2);
+      }
+
+      .feature:nth-child(3n) {
+        max-width: var(--slab-3);
+      }
+
+      .feature h3 {
+        font-size: 1.16rem;
+        font-weight: 700;
+      }
+
+      .feature p {
+        margin-top: 0.6rem;
+        color: var(--muted);
+      }
+
+      /* ---------- install ---------- */
+
+      .install .step {
+        max-width: var(--slab-2);
+        margin-top: 1.6rem;
+        color: var(--muted);
+      }
+
+      .install .step strong {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      pre {
+        max-width: var(--slab-2);
+        margin: 1rem 0 0;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 1rem 1.15rem;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 0.92rem;
+        line-height: 1.5;
+        color: var(--ink);
+      }
+
+      pre code {
+        font-size: inherit;
+      }
+
+      /* ---------- beta ---------- */
+
+      .beta {
+        border-top: 1px solid var(--line);
+        margin-top: 6rem;
+        padding-top: 3.5rem;
+      }
+
+      .beta h2 {
+        color: var(--amber);
+      }
+
+      .caveats {
+        max-width: var(--slab-2);
+        margin: 1.8rem 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 1.05rem;
+      }
+
+      .caveats li {
+        color: var(--muted);
+        padding-left: 1.4rem;
+        position: relative;
+      }
+
+      .caveats li::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0.66em;
+        width: 8px;
+        height: 2px;
+        background: var(--line-bright);
+      }
+
+      .beta .closer {
+        max-width: var(--slab-1);
+        margin-top: 2.2rem;
+        color: var(--ink);
+      }
+
+      /* ---------- footer ---------- */
+
+      footer {
+        margin-top: 6rem;
+        border-top: 1px solid var(--line);
+        padding: 2.5rem 0 4rem;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 1rem 2rem;
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+
+      footer nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+      }
+
+      footer a {
+        color: var(--muted);
+        text-decoration: none;
+      }
+
+      footer a:hover {
+        color: var(--ink);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+        * {
+          transition: none !important;
+          animation: none !important;
+        }
+      }
+
+      @media (max-width: 640px) {
+        body {
+          font-size: 16px;
+        }
+        .hero {
+          padding-top: 3.5rem;
+        }
+        section {
+          padding-top: 4rem;
+        }
+        .masthead nav {
+          display: none;
+        }
+        .install-cmd {
+          font-size: 0.84rem;
+          padding: 0.75rem 0.9rem;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <div class="shell">
+      <header class="masthead">
+        <a class="wordmark" href="/">
+          <svg viewBox="0 0 22 22" aria-hidden="true">
+            <g fill="none" stroke="#7dd3fc" stroke-width="1.85" stroke-linejoin="round">
+              <rect x="6.2" y="2.5" width="9.6" height="3.4" rx="1.7" />
+              <rect x="4.4" y="8.65" width="13.2" height="3.9" rx="1.95" />
+            </g>
+            <rect x="2.5" y="14.4" width="17" height="5.6" rx="2.4" fill="#7dd3fc" />
+          </svg>
+          Central Brain
+        </a>
+        <nav>
+          <a href="#features">Features</a>
+          <a href="#install">Install</a>
+          <a href="#beta">Beta</a>
+          <a href="https://github.com/chrismeehan20/central-brain">GitHub</a>
+        </nav>
+      </header>
+    </div>
+
+    <main id="main">
+      <div class="shell">
+        <div class="hero">
+          <p class="beta-flag">
+            <b>BETA</b>
+            <span>macOS, Apple Silicon. MIT licensed.</span>
+          </p>
+
+          <h1>Know the moment an agent is waiting on you.</h1>
+
+          <p class="lede">
+            Central Brain is a local dashboard for running more AI coding agents than you can keep
+            an eye on. It finds your projects on its own, watches every Claude Code and Codex
+            session, and tells you the second one of them stops and waits for a decision.
+          </p>
+
+          <div class="actions">
+            <code class="install-cmd">brew install --cask chrismeehan20/tap/central-brain</code>
+            <a class="ghost" href="https://github.com/chrismeehan20/central-brain">View the source</a>
+          </div>
+
+          <p class="runs-local">
+            Runs entirely on your machine. There's no account to make and no server to talk to.
+          </p>
+
+          <!-- The app's tray mark, at page scale: two quiet agents and one that needs you. -->
+          <div class="stack" aria-hidden="true">
+            <div class="slab slab--quiet">
+              <span class="name">lantern-cli</span>
+              <span class="state">running</span>
+            </div>
+            <div class="slab slab--quiet">
+              <span class="name">seedbank</span>
+              <span class="state">running</span>
+            </div>
+            <div class="slab slab--lit">
+              <span class="name">tidepool-api</span>
+              <span class="state">waiting on you</span>
+            </div>
+          </div>
+
+          <div class="shot">
+            <img
+              src="dashboard.png"
+              width="2880"
+              height="1744"
+              alt="The Central Brain dashboard. A red Needs attention panel lists two projects: Tidepool API, flagged Needs your OK for a Bash command, and Hedgerow, flagged Waiting or idle. Below it a Last 24 hours summary, then a grid of project cards showing branch, uncommitted state, and linked markdown files."
+            />
+          </div>
+          <p class="shot-note">
+            The real dashboard, running against demo projects.
+          </p>
+        </div>
+      </div>
+
+      <div class="shell">
+        <section class="problem">
+          <h2>The bottleneck is not the agents.</h2>
+          <p class="opening">
+            You start four agents before lunch. One finishes in ten minutes. One hits a permission
+            prompt ninety seconds in and sits there, silently, until you happen to look at that
+            terminal tab again. The other two are somewhere in between and you have no idea which.
+          </p>
+          <p class="punch">It's you, not knowing which one needs you.</p>
+          <p class="resolve">
+            Central Brain answers that question in one window, and pushes the answer at you instead
+            of waiting to be asked.
+          </p>
+        </section>
+
+        <section id="features">
+          <h2>What it does</h2>
+
+          <div class="features">
+            <div class="feature">
+              <h3>Your projects show up on their own</h3>
+              <p>
+                Central Brain reads <code>~/.claude/projects</code> and
+                <code>~/.codex/sessions</code>, the same stores the CLI and the VS Code extension
+                already write to. You never register a project or point it at a folder. Start
+                working somewhere new and it appears on the next scan with a New badge.
+              </p>
+            </div>
+
+            <div class="feature">
+              <h3>You get told, instead of having to check</h3>
+              <p>
+                A Claude Code hook posts to the app as soon as a session hits a permission prompt or
+                goes idle waiting on you. Your Mac fires a desktop notification, and a panel pins
+                itself to the top of the dashboard, live over server-sent events. Stop,
+                SubagentStop, and your next prompt all clear it silently, because by then you're
+                back at the keyboard.
+              </p>
+            </div>
+
+            <div class="feature">
+              <h3>Codex stays covered even while it's quiet</h3>
+              <p>
+                Codex has hooks too, but they only fire once you approve them by hand inside Codex.
+                Until that happens, Central Brain watches for a rollout file that stops growing
+                mid-session and flags it as "maybe waiting," labeled as the guess it is. Once real
+                Codex hook events start landing, the heuristic stands down and drops everything it
+                guessed.
+              </p>
+            </div>
+
+            <div class="feature">
+              <h3>The links point at real files</h3>
+              <p>
+                README, TODO, STATUS, PLAN, CLAUDE.md, and anything under <code>/docs</code> get
+                surfaced per project and open straight in your editor. What you're looking at is
+                your actual source of truth, not a summary of a chat log.
+              </p>
+            </div>
+
+            <div class="feature">
+              <h3>Branch, PRs, and CI without a new token</h3>
+              <p>
+                Central Brain shells out to <code>git</code> and your existing <code>gh</code> login
+                for branch, dirty state, ahead and behind counts, open PRs, and CI status. Nothing
+                to authorize, no OAuth flow to sit through. If <code>gh</code> isn't installed, the
+                app drops those fields quietly instead of nagging.
+              </p>
+            </div>
+
+            <div class="feature">
+              <h3>One line on what's left, if you want it</h3>
+              <p>
+                Claude Haiku can write a one-line summary per project from its docs and recent
+                session activity. It's hash-gated, so it won't run again until something actually
+                changed, and only projects touched in the last 30 days summarize on their own.
+                Bring an Anthropic key or skip the whole feature. Everything else works without one.
+              </p>
+            </div>
+
+            <div class="feature">
+              <h3>Rename, hide, pin</h3>
+              <p>
+                Auto-discovery hands you every folder you've ever worked in, including the junk.
+                Rename one to a real product name, hide what you don't care about, pin what you do.
+                Those decisions survive every rescan. You can also mute notifications without losing
+                the panel, and point every doc link and Open button at VS Code, Cursor, VSCodium, or
+                Windsurf.
+              </p>
+            </div>
+
+            <div class="feature">
+              <h3>Nothing leaves your machine</h3>
+              <p>
+                Everything lives as plain JSON in
+                <code>~/Library/Application Support/central-brain/</code>. No SaaS and no external
+                server. The only network calls are the AI summary requests you turn on yourself.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="install" class="install">
+          <h2>Install it</h2>
+          <p class="section-lede">
+            You need an Apple Silicon Mac and Node.js 22.12 or newer. Any install method works,
+            since Homebrew, nvm, volta, fnm, asdf, and mise all get found automatically.
+          </p>
+
+          <p class="step">
+            The <code>gh</code> CLI is optional and gives you GitHub status.
+            <code>terminal-notifier</code> is optional and gives you nicer notifications.
+          </p>
+
+          <pre><code>brew install --cask chrismeehan20/tap/central-brain</code></pre>
+
+          <p class="step">
+            You can also download the <code>.dmg</code> from the
+            <a href="https://github.com/chrismeehan20/central-brain/releases/latest">latest release</a>
+            and drag Central Brain.app to /Applications.
+          </p>
+
+          <p class="step">
+            <strong>Then clear the quarantine flag once.</strong> The app isn't Apple-notarized yet,
+            so macOS quarantines it on first launch:
+          </p>
+
+          <pre><code>xattr -dc "/Applications/Central Brain.app"</code></pre>
+
+          <p class="step">
+            If you'd rather not run that, launch the app and approve it under System Settings,
+            Privacy and Security, Open Anyway.
+          </p>
+
+          <p class="step">
+            <strong>That's the whole install.</strong> The app runs its own server, so there's no
+            separate service to start. On first launch the dashboard offers to wire the "an agent is
+            waiting on you" hooks into Claude Code and Codex, one click each. The installer backs up
+            your settings first and only appends, so hooks you already have keep working.
+          </p>
+
+          <p class="step">
+            <strong>One caveat about Codex:</strong> it won't run any hook until you approve the
+            hook config once, by hand, inside Codex. Until you do that, no Codex hooks run at all,
+            and Codex doesn't tell you so. The staleness heuristic covers the gap in the meantime.
+          </p>
+
+          <p class="step">
+            The app checks GitHub Releases on launch. When an update is out, the tray menu offers
+            it. Installing is always your click, and the download is verified against a signing key
+            baked into the app.
+          </p>
+        </section>
+
+        <section id="beta" class="beta">
+          <h2>This is beta software</h2>
+          <p class="section-lede">And here's what that actually means.</p>
+
+          <ul class="caveats">
+            <li>
+              macOS only, Apple Silicon only. The server itself is portable Node, so a determined
+              Linux or Windows user could run the bundle and use the browser dashboard, but nobody
+              has packaged that path and I don't support it.
+            </li>
+            <li>Not Apple-notarized. You clear the quarantine flag by hand, once.</li>
+            <li>
+              Codex alerting falls back to a heuristic whenever Codex hooks haven't been approved,
+              or have gone quiet for more than a week.
+            </li>
+            <li>
+              Claude Code's Notification hook conflates "truly blocked" with "idle for about a
+              minute." Both of them show up as waiting.
+            </li>
+            <li>
+              Project identity is the filesystem path. Move a repo and it comes back as a new
+              project, and your old rename and hide decisions for the old path don't follow it.
+            </li>
+          </ul>
+
+          <p class="closer">
+            I use it every day. It's MIT licensed, and
+            <a href="https://github.com/chrismeehan20/central-brain/issues">bug reports</a> and pull
+            requests are welcome.
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <div class="shell">
+      <footer>
+        <p>Central Brain. Built by Chris Meehan, from <a href="https://thesecondbell.com">Second Bell</a>.</p>
+        <nav>
+          <a href="https://github.com/chrismeehan20/central-brain">Source</a>
+          <a href="https://github.com/chrismeehan20/central-brain/releases/latest">Releases</a>
+          <a href="https://github.com/chrismeehan20/central-brain/blob/main/LICENSE">MIT license</a>
+        </nav>
+      </footer>
+    </div>
+  </body>
+</html>
