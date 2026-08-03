@@ -109,7 +109,7 @@ coverage is deliberately out of scope for this queue.
 ## Gate
 
 Unchanged from 0001: `npm ci` + `npm run typecheck` + `npm test` +
-`npm run build`, all exit 0. Test floor at queue open: **153**; raised to **170** by Loop 6, **184** by Loop 7, **190** by Loop 8. Loops that
+`npm run build`, all exit 0. Test floor at queue open: **153**; raised to **170** by Loop 6, **184** by Loop 7, **190** by Loop 8, **211** by Loop 9 (first client tests). Loops that
 touch logic add tests for what they touch; the floor ratchets up as they land.
 
 ## Queue
@@ -128,7 +128,7 @@ Model tiers per the build-loop policy: `simple` = Sonnet maker,
 | 6 | GitHub signal accuracy: aggregate all `statusCheckRollup` entries (worst-of), branch-scoped `gh run list --branch`, distinguish "branch failing" from "open PR failing" (+tests) | ordinary | **merged** | [#31](https://github.com/chrismeehan20/central-brain/pull/31) |
 | 7 | AI trustworthiness: digest no-activity/48 h-expiry state, summary insufficient-evidence sentinel (D3) (+tests) | ordinary | **merged** | [#32](https://github.com/chrismeehan20/central-brain/pull/32) |
 | 8 | Attention rows lead with display name + tool + requested action; dismiss/snooze for heuristic alerts | ordinary | **merged** | [#33](https://github.com/chrismeehan20/central-brain/pull/33) |
-| 9 | Active-vs-All split (D2): sections + filter chips (Attention/Dirty/CI/New), partition logic extracted + node:test'd (D5) | ordinary | queued | — |
+| 9 | Active-vs-All split (D2): sections + filter chips (Attention/Dirty/CI/New), partition logic extracted + node:test'd (D5) | ordinary | **merged** | [#34](https://github.com/chrismeehan20/central-brain/pull/34) |
 | 10 | Repository-aware grouping (D1): worktree + remote-URL detection, one card per repo with expandable checkouts | hard | queued | — |
 | 11 | React 19: `react` + `react-dom` + both `@types` in one PR (closes what #8/#13 attempted) | ordinary | queued | — |
 | 12 | Vite 8 + `@vitejs/plugin-react` major (what #14 attempted) | hard | queued | — |

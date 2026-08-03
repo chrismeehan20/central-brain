@@ -16,6 +16,14 @@ import {
   updateOverride,
 } from "./api";
 import { PreferencesContext } from "./prefs";
+import {
+  ACTIVE_WINDOW_DAYS,
+  CHIPS,
+  type ChipId,
+  compareDashboard,
+  matchesChips,
+  partitionDashboard,
+} from "./sections";
 import ProjectGrid from "./ProjectGrid";
 import ProjectDetailPage from "./ProjectDetailPage";
 import AttentionPanel from "./AttentionPanel";
@@ -42,6 +50,7 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [route, setRoute] = useState<string | null>(parseRoute());
   const [query, setQuery] = useState("");
+  const [chips, setChips] = useState<Set<ChipId>>(new Set());
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [triage, setTriage] = useState<Record<string, MissingProjectTriage> | null>(null);
@@ -210,9 +219,25 @@ export default function App() {
     Boolean(settings && !settings.apiKey.configured && !settings.apiKey.setupDismissed) &&
     !hooksOnboardingActive;
 
-  const visible = projects.filter((p) => !p.hidden && !p.missing && matches(p));
-  const missing = projects.filter((p) => p.missing && !p.hidden);
-  const hidden = projects.filter((p) => p.hidden);
+  // Four buckets, each already sorted. `missing` and `hidden` deliberately
+  // ignore the search box and the chips — they are triage lists, and a filter
+  // silently emptying them would hide work that still needs doing.
+  const { active, dormant, missing, hidden } = partitionDashboard(projects, new Date());
+
+  const keep = (p: Project) => matches(p) && matchesChips(p, chips);
+  // Any chip on, or anything typed, and the Active/dormant split stops helping:
+  // you are hunting for a specific project, so the two buckets collapse into
+  // one flat result list rather than burying half the hits in a closed drawer.
+  const filtering = chips.size > 0 || q.length > 0;
+  const matching = filtering ? [...active, ...dormant].filter(keep).sort(compareDashboard) : [];
+
+  function toggleChip(id: ChipId) {
+    setChips((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
 
   function handleSummaryUpdated(path: string, summary: Project["summary"]) {
     setProjects((prev) => prev?.map((p) => (p.path === path ? { ...p, summary } : p)) ?? prev);
@@ -280,6 +305,23 @@ export default function App() {
         </div>
       </header>
 
+      {/* Sits under the search box because it is the same gesture: narrow the
+          board down to the projects you mean. AND semantics, so stacking two
+          chips gets more specific, not noisier. */}
+      <div className="chips">
+        {CHIPS.map((chip) => (
+          <button
+            key={chip.id}
+            className={`chip${chips.has(chip.id) ? " chip--on" : ""}`}
+            title={chip.title}
+            aria-pressed={chips.has(chip.id)}
+            onClick={() => toggleChip(chip.id)}
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
+
       {/* A transient poll/save failure while good data is already on screen —
           degrade to a strip, not a full wipe. The 30s poll clears `error` on
           its next success, so this self-heals without the ✕. */}
@@ -321,22 +363,40 @@ export default function App() {
           )
         ))}
 
-      {/* Every project, not just `visible`: an attention row must resolve its
-          project's display name even when that project is hidden or filtered
-          out by the search box. */}
+      {/* Every project, not just the shown sections: an attention row must
+          resolve its project's display name even when that project is hidden,
+          dormant, or filtered out by the search box and chips. */}
       <AttentionPanel projects={projects} />
       <DigestPanel />
 
-      <ProjectGrid
-        title="Projects"
-        projects={visible}
-        emptyLabel={
-          query.trim()
-            ? "Nothing matches your search."
-            : "No projects yet — start a Claude or Codex session in a repo."
-        }
-        {...gridProps}
-      />
+      {filtering ? (
+        <ProjectGrid
+          title="Matching projects"
+          projects={matching}
+          emptyLabel={
+            chips.size > 0 ? "Nothing matches these filters." : "Nothing matches your search."
+          }
+          {...gridProps}
+        />
+      ) : (
+        <>
+          <ProjectGrid
+            title="Active"
+            projects={active}
+            emptyLabel={
+              // First run has nothing at all — say what to do about it rather
+              // than reporting an empty window.
+              projects.length === 0
+                ? "No projects yet — start a Claude or Codex session in a repo."
+                : `Nothing active in the last ${ACTIVE_WINDOW_DAYS} days.`
+            }
+            {...gridProps}
+          />
+          {/* The long tail, collapsed. Still one click from everything you own,
+              so nothing is lost — it just stops competing with today's work. */}
+          <ProjectGrid title="All projects" projects={dormant} collapsible {...gridProps} />
+        </>
+      )}
       {missing.length > 0 && (
         <ProjectGrid
           title="Missing from disk"
