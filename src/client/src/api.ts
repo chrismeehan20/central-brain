@@ -1,4 +1,5 @@
 import type {
+  AttentionItem,
   Project,
   Override,
   ProjectSummary,
@@ -83,6 +84,33 @@ export async function openInVsCode(
     throw new Error(body.error ?? `Failed to open: ${res.status}`);
   }
   return { note: body.note };
+}
+
+/**
+ * Snooze/dismiss an attention row. Both return the full list so the panel can
+ * update without waiting for the SSE frame that follows (they converge on the
+ * same list, so whichever lands first is fine).
+ */
+async function attentionMutation(
+  url: string,
+  body: Record<string, unknown>
+): Promise<{ items: AttentionItem[] }> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const parsed = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(parsed.error ?? `Request failed: ${res.status}`);
+  return parsed;
+}
+
+export function snoozeAttention(id: string, minutes: number): Promise<{ items: AttentionItem[] }> {
+  return attentionMutation("/api/attention/snooze", { id, minutes });
+}
+
+export function dismissAttention(id: string): Promise<{ items: AttentionItem[] }> {
+  return attentionMutation("/api/attention/dismiss", { id });
 }
 
 /** `noActivity` = there is genuinely nothing to digest (not "AI is off"). */

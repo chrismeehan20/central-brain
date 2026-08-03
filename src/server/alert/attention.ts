@@ -62,7 +62,11 @@ function upsert(
   const items = store.data.items;
   const idx = items.findIndex((i) => i.id === item.id);
   if (idx >= 0) {
-    items[idx] = { ...items[idx], ...item, updatedAt: nowIso };
+    // `snoozedUntil` is deliberately dropped rather than merged: this path only
+    // runs for a freshly-arrived hook event, and a new PermissionRequest /
+    // Notification is new information that must un-hide a snoozed row. Spreading
+    // the old item would silently carry the snooze over the new event.
+    items[idx] = { ...items[idx], ...item, snoozedUntil: undefined, updatedAt: nowIso };
     return false;
   }
   items.push({ ...item, createdAt: nowIso, updatedAt: nowIso });
@@ -142,4 +146,79 @@ export async function handleHookEvent(
 
 export function getAttentionItems(): AttentionItem[] {
   return attentionDb.data.items;
+}
+
+/**
+ * The user-driven half of the seam. Snooze and dismiss are the same shape as
+ * `handleHookEvent` minus the notifier and liveness tracking: production passes
+ * nothing, tests pass in-memory stubs.
+ */
+export type AttentionMutationDeps = Pick<HookHandlerDeps, "store" | "emit" | "now">;
+
+function resolveMutationDeps(deps: AttentionMutationDeps) {
+  return {
+    store: deps.store ?? attentionDb,
+    emit: deps.emit ?? ((items: AttentionItem[]) => void bus.emit("attention:update", items)),
+    now: deps.now ?? Date.now(),
+  };
+}
+
+/** A dismissed heuristic flag hides for this long — see `dismissAttentionItem`. */
+const DISMISS_SNOOZE_MINUTES = 24 * 60;
+
+/**
+ * Hide one item for `minutes`. Returns false (writing and emitting nothing) when
+ * the id is gone — by the time a click lands, a hook event may already have
+ * cleared the row.
+ */
+export async function snoozeAttentionItem(
+  id: string,
+  minutes: number,
+  deps: AttentionMutationDeps = {},
+): Promise<boolean> {
+  const { store, emit, now } = resolveMutationDeps(deps);
+  const item = store.data.items.find((i) => i.id === id);
+  if (!item) return false;
+
+  const nowIso = new Date(now).toISOString();
+  item.snoozedUntil = new Date(now + minutes * 60_000).toISOString();
+  item.updatedAt = nowIso;
+
+  await store.write();
+  emit(store.data.items);
+  return true;
+}
+
+/**
+ * Get rid of one item for good — as far as the user is concerned.
+ *
+ * Two mechanics behind one verb, because the two kinds of row are created
+ * differently:
+ *
+ * - `codex-maybe-waiting` is *polled*, not pushed. The staleness pass re-creates
+ *   any missing id for as long as the rollout file stays quiet inside its
+ *   5min–1h window, so deleting the row would just resurrect it a minute later.
+ *   A 24h snooze is the honest implementation, and 24h is not arbitrary: it
+ *   matches the heuristic's own ABANDONED window, past which the poller clears
+ *   the item itself — so on default settings the snooze expires into a list the
+ *   item has already left.
+ * - every other type is *edge-triggered* by a hook event, so removal sticks.
+ *   If a genuinely new event fires, the row comes back — which is correct.
+ */
+export async function dismissAttentionItem(
+  id: string,
+  deps: AttentionMutationDeps = {},
+): Promise<boolean> {
+  const { store, emit } = resolveMutationDeps(deps);
+  const item = store.data.items.find((i) => i.id === id);
+  if (!item) return false;
+
+  if (item.type === "codex-maybe-waiting") {
+    return snoozeAttentionItem(id, DISMISS_SNOOZE_MINUTES, deps);
+  }
+
+  store.data.items = store.data.items.filter((i) => i.id !== id);
+  await store.write();
+  emit(store.data.items);
+  return true;
 }

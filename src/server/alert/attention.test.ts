@@ -3,7 +3,13 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import type { AttentionItem } from "@shared/types.js";
 import type { NotifyOptions } from "./notifier.js";
-import { handleHookEvent, type AttentionStoreLike, type HookHandlerDeps } from "./attention.js";
+import {
+  dismissAttentionItem,
+  handleHookEvent,
+  snoozeAttentionItem,
+  type AttentionStoreLike,
+  type HookHandlerDeps,
+} from "./attention.js";
 import { getHookLiveness, type LivenessStoreLike } from "./hookLiveness.js";
 
 /**
@@ -243,4 +249,94 @@ test("a Claude hook event does not make Codex hooks look live", async () => {
 
   assert.equal(h.liveness.data.lastEventAt.claude, "2026-07-29T12:00:00.000Z");
   assert.equal(getHookLiveness("codex", { store: h.liveness, now }).live, false);
+});
+
+/* ---- user-driven snooze / dismiss ---- */
+
+const NOON = Date.parse("2026-07-29T12:00:00.000Z");
+
+function maybeWaitingItem(): AttentionItem {
+  const iso = new Date(NOON).toISOString();
+  return {
+    id: "codex-1:codex-maybe",
+    sessionId: "codex-1",
+    projectPath: path.resolve(CWD),
+    tool: "codex",
+    type: "codex-maybe-waiting",
+    priority: "low",
+    createdAt: iso,
+    updatedAt: iso,
+  };
+}
+
+test("snoozing an item stamps snoozedUntil an hour out, keeps the item, and broadcasts", async () => {
+  const h = makeHarness([], NOON);
+  await handleHookEvent(
+    { session_id: "claude-1", cwd: CWD, hook_event_name: "PermissionRequest" },
+    "claude",
+    h.deps
+  );
+  const emittedBefore = h.emitted.length;
+
+  assert.equal(await snoozeAttentionItem("claude-1:permission", 60, h.deps), true);
+
+  assert.equal(h.store.data.items.length, 1, "a snooze hides the row, it does not delete it");
+  const item = h.store.data.items[0];
+  assert.equal(item.snoozedUntil, "2026-07-29T13:00:00.000Z");
+  assert.equal(item.updatedAt, "2026-07-29T12:00:00.000Z");
+  assert.equal(h.emitted.length, emittedBefore + 1);
+});
+
+test("dismissing a permission item removes it outright", async () => {
+  const h = makeHarness([], NOON);
+  await handleHookEvent(
+    { session_id: "claude-1", cwd: CWD, hook_event_name: "PermissionRequest" },
+    "claude",
+    h.deps
+  );
+
+  assert.equal(await dismissAttentionItem("claude-1:permission", h.deps), true);
+
+  assert.deepEqual(h.store.data.items, []);
+  assert.deepEqual(h.emitted.at(-1), []);
+});
+
+test("dismissing a heuristic codex-maybe-waiting item snoozes it 24h instead of removing it", async () => {
+  // Removal would not stick: the staleness poller re-creates any missing id
+  // while the rollout file stays quiet inside its 5min–1h window.
+  const h = makeHarness([maybeWaitingItem()], NOON);
+
+  assert.equal(await dismissAttentionItem("codex-1:codex-maybe", h.deps), true);
+
+  assert.equal(h.store.data.items.length, 1);
+  assert.equal(h.store.data.items[0].snoozedUntil, "2026-07-30T12:00:00.000Z");
+  assert.equal(h.store.writes, 1);
+  assert.equal(h.emitted.length, 1);
+});
+
+test("snoozing or dismissing an id that no longer exists is a no-op, not a write", async () => {
+  const h = makeHarness([], NOON);
+
+  assert.equal(await snoozeAttentionItem("ghost:permission", 60, h.deps), false);
+  assert.equal(await dismissAttentionItem("ghost:permission", h.deps), false);
+
+  assert.equal(h.store.writes, 0);
+  assert.equal(h.emitted.length, 0);
+});
+
+test("a re-fired hook event un-hides a snoozed item", async () => {
+  // The upsert merges onto the existing item, so `snoozedUntil` has to be
+  // cleared explicitly: a fresh PermissionRequest is new information and must
+  // not stay buried under a snooze the user set for the previous one.
+  const h = makeHarness([], NOON);
+  const event = { session_id: "claude-1", cwd: CWD, hook_event_name: "PermissionRequest" };
+
+  await handleHookEvent(event, "claude", h.deps);
+  await snoozeAttentionItem("claude-1:permission", 60, h.deps);
+  assert.ok(h.store.data.items[0].snoozedUntil);
+
+  await handleHookEvent(event, "claude", h.deps);
+
+  assert.equal(h.store.data.items.length, 1);
+  assert.equal(h.store.data.items[0].snoozedUntil, undefined);
 });

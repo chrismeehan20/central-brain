@@ -196,3 +196,22 @@ test("a Codex hook event older than the liveness window re-arms the heuristic", 
     ["codex-maybe-waiting"]
   );
 });
+
+test("a snoozed flag is neither duplicated nor re-notified while its file stays quiet", async () => {
+  // Snoozing is what "dismiss" does to a heuristic flag, so the poller running
+  // over a still-quiet file must not undo it: upsertAttention keys off the id,
+  // which is still present, so the pass finds nothing to change.
+  const now = Date.now();
+  const snoozedUntil = new Date(now + 24 * 60 * 60_000).toISOString();
+  const h = makeHarness({
+    now,
+    refs: [makeRollout("codex-1", 10 * 60_000, now)],
+    items: [{ ...heuristicFlag("codex-1", new Date(now).toISOString()), snoozedUntil }],
+  });
+
+  assert.equal(await h.run(), false);
+  assert.equal(h.store.data.items.length, 1, "no duplicate row");
+  assert.equal(h.store.data.items[0].snoozedUntil, snoozedUntil, "snooze survives the pass");
+  assert.deepEqual(h.notifications, [], "an already-flagged session never re-notifies");
+  assert.equal(h.store.writes, 0);
+});

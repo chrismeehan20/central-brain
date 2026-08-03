@@ -1,7 +1,15 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { HookEventPayload, SourceTool } from "@shared/types.js";
-import { handleHookEvent, getAttentionItems } from "../alert/attention.js";
+import {
+  dismissAttentionItem,
+  getAttentionItems,
+  handleHookEvent,
+  snoozeAttentionItem,
+} from "../alert/attention.js";
 import { getHookLiveness } from "../alert/hookLiveness.js";
+
+const DEFAULT_SNOOZE_MINUTES = 60;
+const MAX_SNOOZE_MINUTES = 24 * 60;
 
 /**
  * One handler per tool, chosen by route rather than by sniffing the body:
@@ -31,4 +39,41 @@ export async function hookRoutes(app: FastifyInstance) {
     // whether the staleness heuristic is carrying the load.
     hooks: { codex: getHookLiveness("codex") },
   }));
+
+  // Both take the id in the body, not the path: attention ids are
+  // `<sessionId>:<kind>`, and a colon in a URL segment is a needless
+  // encode/decode hazard for no gain.
+  app.post<{ Body: { id?: unknown; minutes?: unknown } }>(
+    "/api/attention/snooze",
+    async (req, reply) => {
+      const id = req.body?.id;
+      if (typeof id !== "string" || !id) {
+        reply.code(400);
+        return { error: "id is required" };
+      }
+      const requested = Number(req.body?.minutes ?? DEFAULT_SNOOZE_MINUTES);
+      const minutes = Number.isFinite(requested)
+        ? Math.min(Math.max(Math.round(requested), 1), MAX_SNOOZE_MINUTES)
+        : DEFAULT_SNOOZE_MINUTES;
+
+      if (!(await snoozeAttentionItem(id, minutes))) {
+        reply.code(404);
+        return { error: "no attention item with that id" };
+      }
+      return { items: getAttentionItems() };
+    }
+  );
+
+  app.post<{ Body: { id?: unknown } }>("/api/attention/dismiss", async (req, reply) => {
+    const id = req.body?.id;
+    if (typeof id !== "string" || !id) {
+      reply.code(400);
+      return { error: "id is required" };
+    }
+    if (!(await dismissAttentionItem(id))) {
+      reply.code(404);
+      return { error: "no attention item with that id" };
+    }
+    return { items: getAttentionItems() };
+  });
 }
