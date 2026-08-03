@@ -120,9 +120,9 @@ Model tiers per the build-loop policy: `simple` = Sonnet maker,
 
 | # | Loop | Tier | Status | PR |
 |---|---|---|---|---|
-| 1 | Stage 0: rebase + merge chokidar 5 (#12); close #8/#13/#14 with fold-in notes | simple | queued | [#12](https://github.com/chrismeehan20/central-brain/pull/12) |
-| 2 | Bundle Satoshi locally (woff2 + `@font-face`), drop the Fontshare fetch | simple | queued | — |
-| 3 | Editor buttons/tooltips honor `Preferences.editor` (ProjectCard, AttentionPanel, detail page) | simple | queued | — |
+| 1 | Stage 0: rebase + merge chokidar 5 (#12); close #8/#13/#14 with fold-in notes | simple | **merged** | [#12](https://github.com/chrismeehan20/central-brain/pull/12) |
+| 2 | Bundle Satoshi locally (woff2 + `@font-face`), drop the Fontshare fetch | simple | **merged** | [#27](https://github.com/chrismeehan20/central-brain/pull/27) |
+| 3 | Editor buttons/tooltips honor `Preferences.editor` (ProjectCard, AttentionPanel, detail page) | simple | **merged** | [#28](https://github.com/chrismeehan20/central-brain/pull/28) |
 | 4 | Keep the last good dashboard through a transient poll failure; error becomes a banner when data exists | simple | queued | — |
 | 5 | Onboarding: hooks panel before the API-key card; key card gated on hooks done/dismissed (D4) | simple | queued | — |
 | 6 | GitHub signal accuracy: aggregate all `statusCheckRollup` entries (worst-of), branch-scoped `gh run list --branch`, distinguish "branch failing" from "open PR failing" (+tests) | ordinary | queued | — |

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { AttentionItem, AttentionType } from "@shared/types";
 import { openInVsCode } from "./api";
 import { relativeTime } from "./format";
+import { useEditorName } from "./prefs";
 
 const ORDER: AttentionType[] = ["permission", "waiting", "codex-maybe-waiting", "done"];
 const LABEL: Record<AttentionType, string> = {
@@ -14,6 +15,7 @@ const LABEL: Record<AttentionType, string> = {
 export default function AttentionPanel() {
   const [items, setItems] = useState<AttentionItem[]>([]);
   const [openError, setOpenError] = useState<string | null>(null);
+  const editorName = useEditorName();
 
   useEffect(() => {
     const source = new EventSource("/api/stream");
@@ -71,8 +73,8 @@ export default function AttentionPanel() {
               className={`attention__item attention__item--${item.type}`}
               title={
                 item.tool === "claude"
-                  ? "Jump to this chat in VS Code — the agent is waiting there"
-                  : "Open this project in VS Code — the agent is waiting there"
+                  ? `Jump to this chat in ${editorName} — the agent is waiting there`
+                  : `Open this project in ${editorName} — the agent is waiting there`
               }
               onClick={() => openProject(item)}
             >
