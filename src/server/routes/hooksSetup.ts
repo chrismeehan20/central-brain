@@ -15,6 +15,7 @@ import {
   codexHooksPath,
   installCodexHooks,
 } from "../hooks/codexHooks.js";
+import { ForwarderInstallError } from "../hooks/forwarder.js";
 import { getHookLiveness } from "../alert/hookLiveness.js";
 import { settingsDb, writeSettings } from "../store/db.js";
 
@@ -76,7 +77,11 @@ export async function hooksSetupRoutes(app: FastifyInstance) {
         installCodexHooks({ hooksPath: targetPath, log: (m) => app.log.info(m) });
       }
     } catch (err) {
-      if (err instanceof ClaudeHooksConfigError || err instanceof CodexHooksConfigError) {
+      if (
+        err instanceof ClaudeHooksConfigError ||
+        err instanceof CodexHooksConfigError ||
+        err instanceof ForwarderInstallError
+      ) {
         // The message explains exactly which file is unparseable and why we
         // refused to touch it — that's the actionable part, pass it through.
         reply.code(409);
