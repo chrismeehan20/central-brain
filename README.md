@@ -117,15 +117,37 @@ configured (e.g. your own `terminal-notifier` setup). Safe to run more than
 once; it's idempotent. To remove them: `npm run uninstall-hooks`.
 
 `install-codex-hooks` does the same for Codex's separate `hooks.json`
-(`$CODEX_HOME/hooks.json`, else `~/.codex/hooks.json`), appending a `command`
+(`$CODEX_HOME/hooks.json`, else `~/.codex/hooks.json`), adding a `command`
 handler that curls each event to `POST /api/hook/codex` — Codex has no `http`
-hook type. **Codex will not run any hook until you approve the hook config
-once, interactively, inside Codex.** Approval is keyed to a hash of the whole
-file, so installing these invalidates any approval you'd already granted, for
-every handler in it; until you re-approve, no Codex hooks run at all and Codex
-does not say so. `~/.codex/hooks.state` appearing is how you know it worked.
-Until then the staleness heuristic keeps covering for it. To remove them:
-`npm run uninstall-codex-hooks`.
+hook type. It only ever touches its own entries: yours are left exactly as they
+are, and every write is backed up first.
+
+**Codex will not run any hook until you approve it once, interactively,
+inside Codex** — run `/hooks` there and approve the central-brain entries.
+Approval is keyed to each *exact hook definition*, not to the file as a whole,
+so installing ours leaves any approval you had already granted for other
+handlers intact. The reverse also holds: if Central Brain ever has to repair
+its own definitions, only its own approval is spent, and the dashboard says so
+rather than letting them fail silently. Until you approve, no central-brain
+hook fires and Codex does not tell you — which is why the dashboard's
+"Connected tools" row exists, and why the staleness heuristic keeps covering
+until a real event proves the pipeline works.
+
+Two things make the installed hook durable, both worth knowing if you ever
+inspect `hooks.json` by hand:
+
+- The command points at `~/Library/Application Support/central-brain/hooks/`,
+  never at this checkout or at `Central Brain.app`. Moving or upgrading the app
+  therefore costs you no re-approval.
+- The port is **not** in the command. The server publishes its address to
+  `~/Library/Application Support/central-brain/runtime/endpoint` on boot and the
+  forwarder reads it per event, so `CENTRAL_BRAIN_PORT` needs no reinstall.
+
+Events that fire while the server is down are kept in
+`~/Library/Application Support/central-brain/spool/` and replayed when it comes
+back, so a restart or an upgrade doesn't silently eat them.
+
+To remove them: `npm run uninstall-codex-hooks`.
 
 ### How the app runs the server
 

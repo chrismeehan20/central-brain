@@ -104,8 +104,24 @@ function classifyEvents(
   return state;
 }
 
-/** Whether Codex has stamped an approval on every one of our current groups. */
-function approvalHint(
+/**
+ * What `trusted_hash` suggests about approval — a hint, never a verdict.
+ *
+ * Named for what it is. On approval, current Codex stamps a `trusted_hash`
+ * into each approved hook group inside hooks.json. (Older builds used a
+ * separate `~/.codex/hooks.state` file keyed to a whole-file hash; current
+ * builds never write it, which is why testing for that file said "approved" on
+ * machines where nothing fired.) Neither location is a documented public
+ * contract, so this can only ever inform `inspectCodexHooks` — a real event
+ * outranks it, and its absence is a prompt to run `/hooks`, not proof of
+ * anything.
+ *
+ * `unknown` when we have no current group to look at; otherwise `approved`
+ * only if EVERY group of ours carries a non-empty hash. A false "approved"
+ * hides a dead pipeline while a false "needs review" costs a few seconds, so
+ * ties break toward needs-review.
+ */
+export function readCodexApprovalHint(
   config: CodexHooksConfig,
   events: readonly string[],
   command: string
@@ -160,7 +176,7 @@ export function inspectCodexHooks(input: CodexHooksInspection): CodexHooksDiagno
   }
 
   const { missing, stale, duplicated } = classifyEvents(config, events, input.command);
-  const approval = approvalHint(config, events, input.command);
+  const approval = readCodexApprovalHint(config, events, input.command);
   const withEvents = {
     ...base,
     missingEvents: missing,

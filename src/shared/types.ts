@@ -381,6 +381,12 @@ export interface HooksSetupStatus {
    * our hook groups in hooks.json carries the `trusted_hash` Codex stamps on
    * approval — the only proof short of a live event that our handlers can run.
    */
-  codex: HookToolStatus & { trusted: boolean; diagnosis: CodexHooksDiagnosis };
+  /**
+   * Codex gets one derived answer rather than the booleans Claude uses. Its
+   * pipeline has more ways to be half-working — an approval step, a forwarder
+   * script, a spool — and independent booleans about those could disagree,
+   * which is exactly how a broken install once displayed as connected.
+   */
+  codex: { diagnosis: CodexHooksDiagnosis };
   setupDismissed: boolean;
 }

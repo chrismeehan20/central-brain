@@ -4,8 +4,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  codexHooksInstalled,
-  codexHooksTrusted,
   CODEX_HOOK_EVENTS,
   CODEX_STATUS_MESSAGE,
   CodexHooksConfigError,
@@ -17,6 +15,7 @@ import {
   type CodexHookGroup,
   type CodexHooksConfig,
 } from "./codexHooks.js";
+import { inspectCodexHooks, readCodexApprovalHint } from "./codexHooksStatus.js";
 
 /**
  * Every test writes to a fresh mkdtemp directory and passes that path in
@@ -246,19 +245,24 @@ function installedFixture(stamp: { ours?: boolean; foreign?: boolean } = {}): st
   return file;
 }
 
-test("freshly installed hooks are NOT trusted — Codex hasn't stamped them yet", () => {
-  assert.equal(codexHooksTrusted(installedFixture()), false);
+/** The approval hint, read the way inspectCodexHooks reads it. */
+function approvalOf(file: string) {
+  return readCodexApprovalHint(readCodexHooksConfig(file), CODEX_HOOK_EVENTS, COMMAND);
+}
+
+test("freshly installed hooks are NOT approved — Codex hasn't stamped them yet", () => {
+  assert.equal(approvalOf(installedFixture()), "needs-review");
 });
 
-test("hooks are trusted once every group of ours carries Codex's trusted_hash", () => {
-  assert.equal(codexHooksTrusted(installedFixture({ ours: true })), true);
+test("hooks read as approved once every group of ours carries Codex's trusted_hash", () => {
+  assert.equal(approvalOf(installedFixture({ ours: true })), "approved");
 });
 
 test("a trusted foreign group proves nothing about ours", () => {
-  assert.equal(codexHooksTrusted(installedFixture({ foreign: true })), false);
+  assert.equal(approvalOf(installedFixture({ foreign: true })), "needs-review");
 });
 
-test("one unstamped event among six means not trusted", () => {
+test("one unstamped event among six is not approved", () => {
   const file = installedFixture({ ours: true });
   const config = JSON.parse(fs.readFileSync(file, "utf8")) as CodexHooksConfig;
   const group = (config.hooks?.SessionEnd ?? []).find((g) =>
@@ -266,12 +270,30 @@ test("one unstamped event among six means not trusted", () => {
   );
   delete group!.trusted_hash;
   fs.writeFileSync(file, JSON.stringify(config));
-  assert.equal(codexHooksTrusted(file), false);
+  assert.equal(approvalOf(file), "needs-review");
 });
 
-test("missing or unparseable config is never trusted", () => {
-  assert.equal(codexHooksTrusted(path.join(os.tmpdir(), "central-brain-nope", "hooks.json")), false);
-  assert.equal(codexHooksTrusted(fixture("{ not json")), false);
+test("a config with nothing of ours in it reports unknown, not approved", () => {
+  // Nothing to look at is not evidence of approval — and the caller turns
+  // unknown into "go and run /hooks", which is the safe direction.
+  assert.equal(approvalOf(fixture("{}")), "unknown");
+  assert.equal(approvalOf(foreignFixture().file), "unknown");
+});
+
+test("an approval stamped on a STALE definition does not read as approved", () => {
+  // The hash covers the definition Codex approved, not ours; counting it would
+  // report an approval the user never gave for the command we now install.
+  const file = installedFixture({ ours: true });
+  const config = JSON.parse(fs.readFileSync(file, "utf8")) as CodexHooksConfig;
+  for (const event of CODEX_HOOK_EVENTS) {
+    for (const group of config.hooks![event]) {
+      for (const entry of group.hooks ?? []) {
+        if (entry.command === COMMAND) entry.command = 'sh "/moved/notify-codex.sh"';
+      }
+    }
+  }
+  fs.writeFileSync(file, JSON.stringify(config));
+  assert.equal(approvalOf(file), "unknown");
 });
 
 test("install preserves a foreign group's trusted_hash and never stamps our own", () => {
@@ -357,8 +379,8 @@ test("a repaired definition drops the trusted_hash that approved the old one", (
   const file = staleFixture();
   installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
 
-  // Leaving the old hash behind would make codexHooksTrusted() report an
-  // approval the user never gave for this command.
+  // Leaving the old hash behind would report an approval the user never gave
+  // for this command.
   const config = read(file);
   for (const event of CODEX_HOOK_EVENTS) {
     const ourGroups = (config.hooks?.[event] ?? []).filter((g) =>
@@ -367,19 +389,29 @@ test("a repaired definition drops the trusted_hash that approved the old one", (
     assert.equal(ourGroups.length, 1);
     assert.equal(ourGroups[0].trusted_hash, undefined, `${event}: stale approval must not survive`);
   }
-  assert.equal(codexHooksTrusted(file), false);
+  assert.equal(approvalOf(file), "needs-review");
 });
 
-test("codexHooksInstalled is false for a stale command and true only for the current one", () => {
+test("a stale command reads as needing repair, and only the current one as installed", () => {
   const file = staleFixture();
-  assert.equal(codexHooksInstalled(file, CODEX_HOOK_EVENTS, COMMAND), false);
+  const diagnose = (command: string) =>
+    inspectCodexHooks({
+      codexDirExists: true,
+      codexHome: path.dirname(file),
+      hooksPath: file,
+      forwarderPath: "/data/hooks/notify-codex.sh",
+      command,
+      liveness: { tool: "codex", live: false, windowMs: 1000 },
+    }).overall;
+
+  assert.equal(diagnose(COMMAND), "needs_repair");
 
   installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {}, dataDir: DATA_DIR });
-  assert.equal(codexHooksInstalled(file, CODEX_HOOK_EVENTS, COMMAND), true);
+  assert.equal(diagnose(COMMAND), "needs_review");
 
   // The same file read against a *different* desired command is stale again —
   // this is what makes "the app moved" visible instead of silent.
-  assert.equal(codexHooksInstalled(file, CODEX_HOOK_EVENTS, 'sh "/elsewhere/notify-codex.sh"'), false);
+  assert.equal(diagnose('sh "/elsewhere/notify-codex.sh"'), "needs_repair");
 });
 
 test("an entry that differs only by timeout or status message is still repaired", () => {

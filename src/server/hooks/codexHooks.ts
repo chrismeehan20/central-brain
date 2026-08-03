@@ -142,64 +142,6 @@ function groupContainsOurs(group: CodexHookGroup): boolean {
 export class CodexHooksConfigError extends Error {}
 
 /**
- * True when every event we care about carries the CURRENT definition.
- *
- * Deliberately not "has an entry of ours". An entry naming a path that no
- * longer exists is not an install, it is a corpse: Codex runs it, `/bin/sh`
- * fails to find the script, and nothing arrives. Reporting that as installed
- * is what hid the Install button and made the state unrecoverable from the UI.
- */
-export function codexHooksInstalled(
-  hooksPath: string,
-  events: readonly string[] = CODEX_HOOK_EVENTS,
-  command: string = buildCodexHookCommand()
-): boolean {
-  let config: CodexHooksConfig;
-  try {
-    config = readCodexHooksConfig(hooksPath);
-  } catch {
-    return false; // unparseable file = not installed; install surfaces the real error
-  }
-  if (!config.hooks) return false;
-  return events.every((event) =>
-    (config.hooks?.[event] ?? []).some((group) =>
-      (group.hooks ?? []).some((entry) => entryIsOurs(entry) && entryIsCurrent(entry, command, event))
-    )
-  );
-}
-
-/**
- * Whether OUR handlers are actually trusted, read the way current Codex
- * records it: on approval, Codex stamps a `trusted_hash` into each approved
- * hook GROUP inside hooks.json itself. (Older builds used a separate
- * ~/.codex/hooks.state file keyed to a whole-file hash; current builds never
- * write it, which is why testing for that file said "approved" on machines
- * where nothing fires — or nagged forever with the wrong instructions.)
- *
- * True only when every event we handle has at least one of our groups AND
- * every group of ours carries a non-empty trusted_hash. An untrusted verdict
- * is recoverable — approving inside Codex fixes it and liveness then proves
- * it — while a false "trusted" hides a dead pipeline, so ties break toward
- * false.
- */
-export function codexHooksTrusted(hooksPath: string, events: readonly string[] = CODEX_HOOK_EVENTS): boolean {
-  let config: CodexHooksConfig;
-  try {
-    config = readCodexHooksConfig(hooksPath);
-  } catch {
-    return false;
-  }
-  if (!config.hooks) return false;
-  return events.every((event) => {
-    const ourGroups = (config.hooks?.[event] ?? []).filter(groupContainsOurs);
-    if (ourGroups.length === 0) return false;
-    return ourGroups.every(
-      (group) => typeof group.trusted_hash === "string" && group.trusted_hash.length > 0
-    );
-  });
-}
-
-/**
  * Read and validate the config. Anything we can't confidently understand is an
  * error, not something to overwrite: this file may hold handlers we didn't
  * write, and clobbering them is unrecoverable.
