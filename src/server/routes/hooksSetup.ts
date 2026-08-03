@@ -9,13 +9,15 @@ import {
   installClaudeHooks,
 } from "../hooks/claudeHooks.js";
 import {
+  buildCodexHookCommand,
   CodexHooksConfigError,
   codexHooksInstalled,
   codexHooksTrusted,
   codexHooksPath,
   installCodexHooks,
 } from "../hooks/codexHooks.js";
-import { ForwarderInstallError } from "../hooks/forwarder.js";
+import { inspectCodexHooks } from "../hooks/codexHooksStatus.js";
+import { codexForwarderPath, ForwarderInstallError } from "../hooks/forwarder.js";
 import { getHookLiveness } from "../alert/hookLiveness.js";
 import { settingsDb, writeSettings } from "../store/db.js";
 
@@ -26,11 +28,31 @@ import { settingsDb, writeSettings } from "../store/db.js";
  * append-only guarantees, driven by a button instead of a terminal.
  */
 
+/** Read `$CODEX_HOME/config.toml`, if there is one — used only to spot hooks being switched off. */
+function readCodexConfigToml(codexHome: string): string | undefined {
+  try {
+    return fs.readFileSync(path.join(codexHome, "config.toml"), "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
 export function buildHooksStatus(): HooksSetupStatus {
   const claudePath = claudeSettingsPath();
   const codexPath = codexHooksPath();
+  const codexHome = path.dirname(codexPath);
   const claudeLiveness = getHookLiveness("claude");
   const codexLiveness = getHookLiveness("codex");
+  const codexDirExists = fs.existsSync(codexHome);
+  const diagnosis = inspectCodexHooks({
+    codexDirExists,
+    codexHome,
+    hooksPath: codexPath,
+    forwarderPath: codexForwarderPath(),
+    command: buildCodexHookCommand(),
+    liveness: codexLiveness,
+    ...(codexDirExists ? { configToml: readCodexConfigToml(codexHome) } : {}),
+  });
   return {
     claude: {
       dirExists: fs.existsSync(path.dirname(claudePath)),
@@ -39,11 +61,12 @@ export function buildHooksStatus(): HooksSetupStatus {
       ...(claudeLiveness.lastEventAt ? { lastEventAt: claudeLiveness.lastEventAt } : {}),
     },
     codex: {
-      dirExists: fs.existsSync(path.dirname(codexPath)),
+      dirExists: codexDirExists,
       installed: codexHooksInstalled(codexPath),
       trusted: codexHooksTrusted(codexPath),
       live: codexLiveness.live,
       ...(codexLiveness.lastEventAt ? { lastEventAt: codexLiveness.lastEventAt } : {}),
+      diagnosis,
     },
     setupDismissed: settingsDb.data.hooksSetupDismissed ?? false,
   };
