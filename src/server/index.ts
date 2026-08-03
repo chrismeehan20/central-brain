@@ -18,6 +18,7 @@ import { startGithubPoller } from "./poll/githubPoller.js";
 import { startSummaryPoller } from "./poll/summaryPoller.js";
 import { startDetailPoller } from "./poll/detailPoller.js";
 import { ensureInstallId, installCodexForwarder, writeRuntimeEndpoint } from "./hooks/forwarder.js";
+import { startSpoolDrain } from "./poll/spoolDrain.js";
 
 const PORT = Number(process.env.PORT ?? 4317);
 const SCAN_INTERVAL_MS = 3 * 60 * 1000;
@@ -96,6 +97,7 @@ app
     startGithubPoller();
     startSummaryPoller();
     startDetailPoller();
+    startSpoolDrain((m) => app.log.info(m));
   })
   .catch((err) => {
     app.log.error(err);

@@ -54,6 +54,13 @@ export interface HookHandlerDeps {
    * with no forwarder to stamp anything.
    */
   receipt?: Omit<HookReceipt, "receivedAt">;
+  /**
+   * Set for events replayed out of the offline spool. They prove the forwarder
+   * ran at some point in the past — and, by having needed spooling at all,
+   * prove the live path was *not* working — so they must not refresh liveness,
+   * which means "the pipeline works right now".
+   */
+  skipLiveness?: boolean;
 }
 
 function clearSession(store: AttentionStoreLike, sessionId: string) {
@@ -103,11 +110,13 @@ export async function handleHookEvent(
   // Recorded before any early return: an event we don't act on (PreToolUse,
   // SubagentStart, …) still proves this tool's hooks are firing, which is what
   // gates the Codex staleness heuristic.
-  await recordHookEvent(tool, {
-    store: deps.livenessStore,
-    now,
-    ...(deps.receipt ? { receipt: deps.receipt } : {}),
-  });
+  if (!deps.skipLiveness) {
+    await recordHookEvent(tool, {
+      store: deps.livenessStore,
+      now,
+      ...(deps.receipt ? { receipt: deps.receipt } : {}),
+    });
+  }
 
   if (CLEARING_EVENTS.has(eventName)) {
     clearSession(store, sessionId);

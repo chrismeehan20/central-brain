@@ -177,10 +177,16 @@ function readRuntimeFile(target: string): string | undefined {
  * without this a receipt from the *previous* script would keep vouching for a
  * pipeline that the upgrade may have changed.
  */
-export const FORWARDER_REVISION = "2";
+export const FORWARDER_REVISION = "3";
 
-/** Revisions whose receipts we accept as proof the pipeline works. */
-export const SUPPORTED_FORWARDER_REVISIONS: ReadonlySet<string> = new Set([FORWARDER_REVISION]);
+/**
+ * Revisions whose receipts we accept as proof the pipeline works.
+ *
+ * Includes the previous revision: 2 differed only by not spooling, and its
+ * deliveries were identical on the wire, so refusing them would cost a
+ * re-verification that proves nothing.
+ */
+export const SUPPORTED_FORWARDER_REVISIONS: ReadonlySet<string> = new Set([FORWARDER_REVISION, "2"]);
 
 export function installIdPath(dataDir: string = resolveDataDir()): string {
   return path.join(runtimeDir(dataDir), "install-id");
