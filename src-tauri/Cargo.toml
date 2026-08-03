@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "1.2.0"
+version = "1.3.0"
 description = "Menubar app for Central Brain — a local mission-control dashboard for AI-agent-driven projects"
 authors = ["Chris Meehan"]
 license = "MIT"
