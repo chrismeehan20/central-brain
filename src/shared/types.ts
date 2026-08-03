@@ -136,6 +136,20 @@ export interface ProjectDetail {
   lastError?: string; // e.g. "daily AI cap reached" — surfaced in the UI
 }
 
+/**
+ * One checkout of a repository that resolved to a single project card —
+ * a linked worktree, or an alternate clone sharing the same origin remote.
+ */
+export interface ProjectCheckout {
+  path: string;
+  /** True for the checkout the card itself represents. */
+  primary: boolean;
+  /** Checked-out branch, when HEAD is a readable symbolic ref. */
+  branch?: string;
+  lastActivity?: string;
+  sessionCount: number;
+}
+
 export interface Project {
   path: string; // canonical absolute path (real on-disk casing; case-insensitive merged)
   displayName: string;
@@ -144,6 +158,13 @@ export interface Project {
   pinned: boolean;
   missing: boolean; // true = the folder no longer exists on disk (moved/deleted)
   mergedFrom?: string[]; // old paths folded in via a relocation, if any
+  /**
+   * Present when several on-disk checkouts of the same repository folded into
+   * this one card (always length ≥ 2, primary first). Sessions and
+   * lastActivity on the card cover the whole set; markdown, GitHub status and
+   * overrides come from the primary checkout.
+   */
+  checkouts?: ProjectCheckout[];
   lastActivity?: string;
   sessions: SessionRef[];
   markdown: MarkdownDoc[];

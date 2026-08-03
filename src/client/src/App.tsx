@@ -208,7 +208,12 @@ export default function App() {
     p.displayName.toLowerCase().includes(q) ||
     p.path.toLowerCase().includes(q) ||
     (p.summary?.text ?? "").toLowerCase().includes(q) ||
-    (p.openItems ?? []).some((t) => t.toLowerCase().includes(q));
+    (p.openItems ?? []).some((t) => t.toLowerCase().includes(q)) ||
+    // Sibling checkouts folded into this card should be findable by their
+    // own paths and branch names too.
+    (p.checkouts ?? []).some(
+      (c) => c.path.toLowerCase().includes(q) || (c.branch ?? "").toLowerCase().includes(q)
+    );
 
   // Onboarding shows until a key exists or the user skips — never for a key
   // that came from the environment, which needs no setup. It's also step 2:

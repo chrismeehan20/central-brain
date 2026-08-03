@@ -46,6 +46,7 @@ export default function ProjectCard({
   const [relocateError, setRelocateError] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
+  const [showCheckouts, setShowCheckouts] = useState(false);
   const counts = toolCounts(project);
   const docHref = useDocHref();
   const editorName = useEditorName();
@@ -264,6 +265,41 @@ export default function ProjectCard({
               </div>
               {relocateError && <span className="card__summary-error">{relocateError}</span>}
             </>
+          )}
+        </div>
+      )}
+
+      {/* Several on-disk checkouts of one repository fold into this card;
+          the rows expand on demand so a worktree-heavy repo stays one line
+          tall until you ask. Each row opens its own folder. */}
+      {project.checkouts && project.checkouts.length > 1 && (
+        <div className="checkouts">
+          <button className="checkouts__toggle" onClick={() => setShowCheckouts((v) => !v)}>
+            <span className="section__caret">{showCheckouts ? "▾" : "▸"}</span>{" "}
+            {project.checkouts.length} checkouts of this repo
+          </button>
+          {showCheckouts && (
+            <div className="checkouts__list">
+              {project.checkouts.map((c) => (
+                <div key={c.path} className="checkouts__row">
+                  <span className="checkouts__branch" title={c.path}>
+                    {c.branch ?? c.path.split("/").filter(Boolean).pop()}
+                    {c.primary ? " (primary)" : ""}
+                  </span>
+                  <span className="checkouts__meta">
+                    {c.sessionCount} session{c.sessionCount === 1 ? "" : "s"} ·{" "}
+                    {relativeTime(c.lastActivity)}
+                  </span>
+                  <button
+                    className="checkouts__open"
+                    title={`Open ${c.path} in ${editorName}`}
+                    onClick={() => openInVsCode(c.path).catch((err) => setOpenError(String((err as Error).message ?? err)))}
+                  >
+                    Open
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
