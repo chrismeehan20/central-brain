@@ -140,11 +140,88 @@ fn newest_version_dir(dir: &Path) -> Option<PathBuf> {
     best.map(|(_, path)| path)
 }
 
+/// The floor the server bundle actually needs: esbuild targets node22 and
+/// `package.json` declares `>=22.12` (Vite 8's 22.x minimum). Must match both.
+const MIN_NODE: (u64, u64) = (22, 12);
+
+/// "v22.12.0\n" → [22, 12, 0]. Tolerates a missing "v" and junk suffixes.
+fn parse_node_version(output: &str) -> Option<Vec<u64>> {
+    let trimmed = output.trim().trim_start_matches('v');
+    if trimmed.is_empty() {
+        return None;
+    }
+    let key: Vec<u64> = trimmed
+        .split('.')
+        .map(|part| {
+            part.chars()
+                .take_while(char::is_ascii_digit)
+                .collect::<String>()
+                .parse()
+                .unwrap_or(0)
+        })
+        .collect();
+    if key.first().copied().unwrap_or(0) == 0 {
+        return None; // "not-a-version" parses to [0]; never a real node
+    }
+    Some(key)
+}
+
+fn version_meets_floor(version: &[u64]) -> bool {
+    let major = version.first().copied().unwrap_or(0);
+    let minor = version.get(1).copied().unwrap_or(0);
+    major > MIN_NODE.0 || (major == MIN_NODE.0 && minor >= MIN_NODE.1)
+}
+
+/// Ask a candidate binary what it is. A ~30ms subprocess per candidate, once
+/// at startup — cheap insurance against picking a fossil `/usr/local/bin/node`
+/// while a perfectly good newer install sits one probe further down the list.
+fn node_version(path: &Path) -> Option<Vec<u64>> {
+    let output = Command::new(path).arg("--version").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_node_version(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// Every place a node interpreter might live, in preference order.
+fn candidate_nodes() -> Vec<PathBuf> {
+    let mut candidates: Vec<PathBuf> =
+        NODE_CANDIDATES.iter().map(PathBuf::from).collect();
+
+    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+        // Volta keeps a stable shim rather than per-version directories.
+        candidates.push(home.join(".volta/bin/node"));
+        for (versions_dir, node_rel) in VERSION_MANAGER_LAYOUTS {
+            if let Some(version) = newest_version_dir(&home.join(versions_dir)) {
+                candidates.push(version.join(node_rel));
+            }
+        }
+    }
+
+    // Last resort: a PATH lookup, which only helps when launched from a shell.
+    if let Some(path_var) = std::env::var_os("PATH") {
+        candidates.extend(std::env::split_paths(&path_var).map(|dir| dir.join("node")));
+    }
+    candidates
+}
+
 fn find_node() -> Option<PathBuf> {
-    // Explicit override first — the escape hatch for any layout not probed below.
+    // Explicit override first — the escape hatch for any layout not probed
+    // below. Honored even when old or unidentifiable (it IS the escape hatch),
+    // but loudly, so a hung startup has a log line pointing at the cause.
     if let Some(explicit) = std::env::var_os("CENTRAL_BRAIN_NODE") {
         let path = PathBuf::from(explicit);
         if path.is_file() {
+            match node_version(&path) {
+                Some(v) if version_meets_floor(&v) => {}
+                got => log::warn!(
+                    "sidecar: CENTRAL_BRAIN_NODE is {} (reported {:?}), below the required {}.{} — using it anyway because it is explicit",
+                    path.display(),
+                    got,
+                    MIN_NODE.0,
+                    MIN_NODE.1
+                ),
+            }
             return Some(path);
         }
         log::warn!(
@@ -153,34 +230,29 @@ fn find_node() -> Option<PathBuf> {
         );
     }
 
-    for candidate in NODE_CANDIDATES {
-        let path = Path::new(candidate);
-        if path.is_file() {
-            return Some(path.to_path_buf());
+    // First candidate that exists AND is new enough. Existing-but-old (the
+    // fossil /usr/local/bin/node problem) is skipped with a log line instead
+    // of being spawned and failing on modern syntax somewhere mid-bundle.
+    for candidate in candidate_nodes() {
+        if !candidate.is_file() {
+            continue;
+        }
+        match node_version(&candidate) {
+            Some(version) if version_meets_floor(&version) => return Some(candidate),
+            Some(version) => log::warn!(
+                "sidecar: skipping {} — node {} is older than the required {}.{}",
+                candidate.display(),
+                version.iter().map(u64::to_string).collect::<Vec<_>>().join("."),
+                MIN_NODE.0,
+                MIN_NODE.1
+            ),
+            None => log::warn!(
+                "sidecar: skipping {} — `--version` failed or was unparseable",
+                candidate.display()
+            ),
         }
     }
-
-    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-        // Volta keeps a stable shim rather than per-version directories.
-        let volta = home.join(".volta/bin/node");
-        if volta.is_file() {
-            return Some(volta);
-        }
-        for (versions_dir, node_rel) in VERSION_MANAGER_LAYOUTS {
-            if let Some(version) = newest_version_dir(&home.join(versions_dir)) {
-                let node = version.join(node_rel);
-                if node.is_file() {
-                    return Some(node);
-                }
-            }
-        }
-    }
-
-    // Last resort: a PATH lookup, which only helps when launched from a shell.
-    let path_var = std::env::var_os("PATH")?;
-    std::env::split_paths(&path_var)
-        .map(|dir| dir.join("node"))
-        .find(|candidate| candidate.is_file())
+    None
 }
 
 /// Resolves a bundled resource, tolerating the layout difference between a
@@ -213,8 +285,11 @@ pub fn start(app: &AppHandle) -> ServerState {
 
     let Some(node) = find_node() else {
         let why = format!(
-            "no Node.js interpreter found (looked in {}, nvm/volta/fnm/asdf/mise installs, \
-             and PATH — set CENTRAL_BRAIN_NODE to your node binary to override)",
+            "no Node.js >= {}.{} found (looked in {}, nvm/volta/fnm/asdf/mise installs, \
+             and PATH; older installs were skipped — see the log. Set CENTRAL_BRAIN_NODE \
+             to a node binary to override)",
+            MIN_NODE.0,
+            MIN_NODE.1,
             NODE_CANDIDATES.join(", ")
         );
         log::error!("sidecar: {why}");

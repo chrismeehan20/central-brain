@@ -182,4 +182,8 @@ Verification notes that sharpen the findings:
 | R2 | **Blocker** — Codex hook trust: read per-group `trusted_hash` from hooks.json (`trusted`), retire the hooks.state existence check, honest nag copy; SessionEnd timeout 3s; per-tool onboarding promise | hard | **merged** | [#40](https://github.com/chrismeehan20/central-brain/pull/40) |
 | R3 | Grouping state: most-recent wins among multiple main-worktree clones; sibling checkouts' dirty/CI state polled and surfaced (rows + card flags) | ordinary | **merged** | [#41](https://github.com/chrismeehan20/central-brain/pull/41) |
 | R4 | Branch CI: aggregate the latest run per workflow on the branch (`-L 20`, group by workflowName, worst-of) instead of the single newest run | ordinary | **merged** | [#42](https://github.com/chrismeehan20/central-brain/pull/42) |
-| R5 | Node floor: engines + README to >=22.12 (Vite 8's real minimum); sidecar `find_node` version-checks candidates instead of taking the first file; local cargo gate (CI has no Rust job) | hard | queued | — |
+| R5 | Node floor: engines + README to >=22.12 (Vite 8's real minimum); sidecar `find_node` version-checks candidates instead of taking the first file; local cargo gate (CI has no Rust job) | hard | **merged** | [#43](https://github.com/chrismeehan20/central-brain/pull/43) |
+- **2026-08-03** — Round 2 complete: R0-R5 merged (PRs #38-#43), both
+  blockers closed the same day they were reported. JS floor 228 -> 250,
+  Rust tests 4 -> 6 (verified locally — CI still has no Rust job, by the
+  0001 decision). npm audit: clean.

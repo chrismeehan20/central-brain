@@ -10,7 +10,7 @@
     "url": "https://github.com/chrismeehan20/central-brain.git"
   },
   "engines": {
-    "node": ">=22.5"
+    "node": ">=22.12"
   },
   "scripts": {
     "dev": "concurrently -n server,client -c blue,green \"tsx watch src/server/index.ts\" \"vite\"",
