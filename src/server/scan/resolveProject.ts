@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { Override, Project, SessionRef } from "@shared/types.js";
+import type { Override, Project, ProjectCheckout, SessionRef } from "@shared/types.js";
 import { scanClaudeProjects } from "./claude.js";
 import { scanCodexProjects } from "./codex.js";
 import { scanMarkdown } from "./markdown.js";
+import { detectRepoIdentity, type RepoIdentity } from "./repoIdentity.js";
 import { overridesDb } from "../store/db.js";
 
 function defaultDisplayName(projectPath: string): string {
@@ -85,6 +86,76 @@ function groupSessions(
   return grouped;
 }
 
+/**
+ * Fold projects that are checkouts of the same repository into one card.
+ *
+ * Only projects that exist on disk take part — a missing path can't be
+ * probed for its `.git`, and it already has its own triage flow (relocation).
+ * The primary checkout is the repo's main worktree when it's in the group,
+ * else the most recently active member; it contributes the card's path,
+ * name, overrides and docs, while sessions and lastActivity cover the set.
+ *
+ * `identityFor` is injectable so the grouping rules are testable without a
+ * filesystem full of fixture repos.
+ */
+export function groupProjectsByRepo(
+  projects: Project[],
+  identityFor: (projectPath: string) => RepoIdentity = detectRepoIdentity
+): Project[] {
+  const identities = new Map<string, RepoIdentity>();
+  const groups = new Map<string, Project[]>();
+
+  for (const project of projects) {
+    const identity = project.missing
+      ? { repoKey: null, isMainWorktree: false }
+      : identityFor(project.path);
+    identities.set(project.path, identity);
+    const key = identity.repoKey ?? `solo:${project.path}`;
+    const members = groups.get(key);
+    if (members) members.push(project);
+    else groups.set(key, [project]);
+  }
+
+  const result: Project[] = [];
+  for (const members of groups.values()) {
+    if (members.length === 1) {
+      result.push(members[0]);
+      continue;
+    }
+
+    const byRecency = (a: Project, b: Project) =>
+      (b.lastActivity ?? "").localeCompare(a.lastActivity ?? "");
+    const primary =
+      members.find((m) => identities.get(m.path)?.isMainWorktree) ??
+      [...members].sort(byRecency)[0];
+
+    const sessions = members
+      .flatMap((m) => m.sessions)
+      .sort((a, b) => (a.lastActivity > b.lastActivity ? -1 : 1));
+
+    const checkouts: ProjectCheckout[] = members
+      .map((m) => ({
+        path: m.path,
+        primary: m === primary,
+        branch: identities.get(m.path)?.branch,
+        lastActivity: m.lastActivity,
+        sessionCount: m.sessions.length,
+      }))
+      .sort((a, b) => {
+        if (a.primary !== b.primary) return a.primary ? -1 : 1;
+        return (b.lastActivity ?? "").localeCompare(a.lastActivity ?? "");
+      });
+
+    result.push({
+      ...primary,
+      sessions,
+      lastActivity: sessions[0]?.lastActivity,
+      checkouts,
+    });
+  }
+  return result;
+}
+
 export function resolveProjects(): Project[] {
   const overrides = overridesDb.data;
   const grouped = groupSessions([scanClaudeProjects(), scanCodexProjects()], overrides);
@@ -113,9 +184,10 @@ export function resolveProjects(): Project[] {
     });
   }
 
-  projects.sort(compareProjects);
+  const byRepo = groupProjectsByRepo(projects);
+  byRepo.sort(compareProjects);
 
-  return projects;
+  return byRepo;
 }
 
 export function compareProjects(a: Project, b: Project): number {

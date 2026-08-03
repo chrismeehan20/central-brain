@@ -48,10 +48,16 @@ export default function AttentionPanel({ projects }: { projects: Project[] }) {
 
   // Display names come from the project list; a session in a folder we've never
   // scanned (or one with no cwd at all) falls back to the last path segment.
-  const nameByPath = useMemo(
-    () => new Map(projects.map((p) => [p.path, p.displayName])),
-    [projects]
-  );
+  // Sibling checkouts folded into one card resolve to that card's name too.
+  const nameByPath = useMemo(() => {
+    const map = new Map(projects.map((p) => [p.path, p.displayName]));
+    for (const p of projects) {
+      for (const c of p.checkouts ?? []) {
+        if (!map.has(c.path)) map.set(c.path, p.displayName);
+      }
+    }
+    return map;
+  }, [projects]);
 
   function projectName(projectPath: string): string {
     return (
