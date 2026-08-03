@@ -67,7 +67,7 @@ export default function HooksPanel({ mode, onOnboardingActionable }: Props) {
       (status.claude.dirExists && !status.claude.installed) ||
       (status.codex.dirExists && !status.codex.installed);
     const codexNeedsApproval =
-      status.codex.installed && !status.codex.live && !status.codex.approvalStateExists;
+      status.codex.installed && !status.codex.live && !status.codex.trusted;
     onOnboardingActionable?.(!status.setupDismissed && (actionable || codexNeedsApproval));
   }, [status, onOnboardingActionable]);
 
@@ -77,7 +77,7 @@ export default function HooksPanel({ mode, onOnboardingActionable }: Props) {
     (status.claude.dirExists && !status.claude.installed) ||
     (status.codex.dirExists && !status.codex.installed);
   const codexNeedsApproval =
-    status.codex.installed && !status.codex.live && !status.codex.approvalStateExists;
+    status.codex.installed && !status.codex.live && !status.codex.trusted;
 
   // The onboarding card earns its screen space only while there is a button to
   // click or an approval to chase; the settings copy is always reachable.
@@ -103,9 +103,11 @@ export default function HooksPanel({ mode, onOnboardingActionable }: Props) {
     if (!t.installed) return "Hooks not installed — alerts fall back to slower scanning.";
     if (t.live) return "Connected — events are arriving.";
     if (tool === "codex") {
-      return status!.codex.approvalStateExists
-        ? "Installed — waiting for events. If Codex asks you to approve the hook config again, accept it."
-        : "Installed — one step left: start a Codex session and approve the hook config when it asks. Codex runs no hooks until you do.";
+      // `trusted` reads the trusted_hash Codex stamps into each approved hook
+      // group — the only proof short of a live event that our handlers can run.
+      return status!.codex.trusted
+        ? "Approved — waiting for the first event."
+        : "Installed — one step left: start a Codex session and approve the new hooks when it asks. Codex runs none of them until you do.";
     }
     return "Installed — waiting for the first session event.";
   }
@@ -148,9 +150,9 @@ export default function HooksPanel({ mode, onOnboardingActionable }: Props) {
         <h2 className="setup__title">Get alerts the moment an agent needs you</h2>
       </div>
       <p className="setup__lede">
-        Install a hook so Claude Code and Codex tell Central Brain when a session is blocked on a
-        permission or waiting for your reply. It only appends entries — your existing hooks are
-        never touched, and there's a backup either way.
+        Install a hook so Claude Code and Codex tell Central Brain when a session needs your OK —
+        and, for Claude Code, when it's waiting on your reply. It only appends entries — your
+        existing hooks are never touched, and there's a backup either way.
       </p>
       {body}
       <div className="setup__footer">

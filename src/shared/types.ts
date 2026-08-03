@@ -304,7 +304,11 @@ export interface HookToolStatus {
 
 export interface HooksSetupStatus {
   claude: HookToolStatus;
-  /** Codex adds the interactive trust-approval step; hooks.state existing is its footprint. */
-  codex: HookToolStatus & { approvalStateExists: boolean };
+  /**
+   * Codex adds the interactive trust-approval step. `trusted` = every one of
+   * our hook groups in hooks.json carries the `trusted_hash` Codex stamps on
+   * approval — the only proof short of a live event that our handlers can run.
+   */
+  codex: HookToolStatus & { trusted: boolean };
   setupDismissed: boolean;
 }

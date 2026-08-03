@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  codexHooksTrusted,
   CODEX_HOOK_EVENTS,
   CODEX_STATUS_MESSAGE,
   CodexHooksConfigError,
@@ -97,8 +98,10 @@ test("installing preserves foreign handlers exactly and appends ours for every e
     assert.equal(groups.length, 2, `${event}: ours appended after theirs`);
   }
   for (const event of CODEX_HOOK_EVENTS) {
+    // SessionEnd declares 3s because that's what Codex actually enforces there.
+    const timeout = event === "SessionEnd" ? 3 : 10;
     assert.deepEqual(ourEntries(config, event), [
-      { type: "command", command: COMMAND, timeout: 10, statusMessage: CODEX_STATUS_MESSAGE },
+      { type: "command", command: COMMAND, timeout, statusMessage: CODEX_STATUS_MESSAGE },
     ]);
   }
 });
@@ -213,4 +216,72 @@ test("codexHooksPath prefers CODEX_HOME over the home directory", () => {
   );
   assert.equal(codexHooksPath({}, "/tmp/fake-home"), path.join("/tmp/fake-home", ".codex", "hooks.json"));
   assert.equal(codexHooksPath({ CODEX_HOME: "  " }, "/tmp/fake-home"), path.join("/tmp/fake-home", ".codex", "hooks.json"));
+});
+
+// ---- per-group trust detection (round 2, R2) ----
+
+/** Install ours into a fresh fixture, then optionally stamp trusted_hash the way Codex does on approval. */
+function installedFixture(stamp: { ours?: boolean; foreign?: boolean } = {}): string {
+  const file = fixture(JSON.stringify({ hooks: { UserPromptSubmit: [foreignGroup()] } }));
+  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
+  const config = JSON.parse(fs.readFileSync(file, "utf8")) as CodexHooksConfig;
+  for (const groups of Object.values(config.hooks ?? {})) {
+    for (const group of groups) {
+      const ours = (group.hooks ?? []).some((h) => h.command === COMMAND);
+      if ((ours && stamp.ours) || (!ours && stamp.foreign)) group.trusted_hash = "abc123";
+    }
+  }
+  fs.writeFileSync(file, JSON.stringify(config));
+  return file;
+}
+
+test("freshly installed hooks are NOT trusted — Codex hasn't stamped them yet", () => {
+  assert.equal(codexHooksTrusted(installedFixture()), false);
+});
+
+test("hooks are trusted once every group of ours carries Codex's trusted_hash", () => {
+  assert.equal(codexHooksTrusted(installedFixture({ ours: true })), true);
+});
+
+test("a trusted foreign group proves nothing about ours", () => {
+  assert.equal(codexHooksTrusted(installedFixture({ foreign: true })), false);
+});
+
+test("one unstamped event among six means not trusted", () => {
+  const file = installedFixture({ ours: true });
+  const config = JSON.parse(fs.readFileSync(file, "utf8")) as CodexHooksConfig;
+  const group = (config.hooks?.SessionEnd ?? []).find((g) =>
+    (g.hooks ?? []).some((h) => h.command === COMMAND)
+  );
+  delete group!.trusted_hash;
+  fs.writeFileSync(file, JSON.stringify(config));
+  assert.equal(codexHooksTrusted(file), false);
+});
+
+test("missing or unparseable config is never trusted", () => {
+  assert.equal(codexHooksTrusted(path.join(os.tmpdir(), "central-brain-nope", "hooks.json")), false);
+  assert.equal(codexHooksTrusted(fixture("{ not json")), false);
+});
+
+test("install preserves a foreign group's trusted_hash and never stamps our own", () => {
+  const file = fixture(
+    JSON.stringify({ hooks: { UserPromptSubmit: [{ ...foreignGroup(), trusted_hash: "keepme" }] } })
+  );
+  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
+  const config = JSON.parse(fs.readFileSync(file, "utf8")) as CodexHooksConfig;
+  const groups = config.hooks?.UserPromptSubmit ?? [];
+  assert.equal(groups[0].trusted_hash, "keepme");
+  const ours = groups.find((g) => (g.hooks ?? []).some((h) => h.command === COMMAND));
+  assert.equal(ours?.trusted_hash, undefined);
+});
+
+test("SessionEnd declares the 3s timeout Codex actually enforces; other events keep 10s", () => {
+  const file = fixture("");
+  installCodexHooks({ hooksPath: file, command: COMMAND, log: () => {} });
+  const config = JSON.parse(fs.readFileSync(file, "utf8")) as CodexHooksConfig;
+  const timeoutFor = (event: string) =>
+    (config.hooks?.[event] ?? []).flatMap((g) => g.hooks ?? []).find((h) => h.command === COMMAND)
+      ?.timeout;
+  assert.equal(timeoutFor("SessionEnd"), 3);
+  assert.equal(timeoutFor("PermissionRequest"), 10);
 });

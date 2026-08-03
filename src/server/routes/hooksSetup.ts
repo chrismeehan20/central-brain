@@ -10,8 +10,8 @@ import {
 } from "../hooks/claudeHooks.js";
 import {
   CodexHooksConfigError,
-  codexApprovalStateExists,
   codexHooksInstalled,
+  codexHooksTrusted,
   codexHooksPath,
   installCodexHooks,
 } from "../hooks/codexHooks.js";
@@ -40,7 +40,7 @@ export function buildHooksStatus(): HooksSetupStatus {
     codex: {
       dirExists: fs.existsSync(path.dirname(codexPath)),
       installed: codexHooksInstalled(codexPath),
-      approvalStateExists: codexApprovalStateExists(codexPath),
+      trusted: codexHooksTrusted(codexPath),
       live: codexLiveness.live,
       ...(codexLiveness.lastEventAt ? { lastEventAt: codexLiveness.lastEventAt } : {}),
     },
