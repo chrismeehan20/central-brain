@@ -271,14 +271,14 @@ ask before risky calls.
 |---|---|---|---|---|
 | 1 | CI gate: workflow (typecheck + build), `dependabot.yml` with `update-types: [minor, patch]`, gitignore `.vscode/` | simple | **merged** | [#1](https://github.com/chrismeehan20/central-brain/pull/1) |
 | 2 | Test harness: `node:test` via `tsx` (no new deps), `npm test` in CI, first tests for `paths.ts` + `markdown.ts` | simple | **merged** | [#10](https://github.com/chrismeehan20/central-brain/pull/10) |
-| 3 | Claude scanner: **bounded reads** (625 MB / ~1,170 ms blocking per scan today), plus sibling-`cwd` fallback. **Keeps** the `sessions-index.json` path — see the correction above | ordinary | **in progress** | — |
-| 4a | **Fix the `session_meta` truncated read** — 8 KiB buffer vs p50 15 KB first lines was silently dropping 323 of 327 Codex sessions | ordinary | **in progress** | — |
-| 4b | Enrich Codex sessions from `state_*.sqlite` `threads` (`tokens_used`, `git_branch`, `git_origin_url`, `model`, `approval_mode`, `title`); covers threads whose rollout file was auto-cleaned | ordinary | **in progress** | — |
-| 4c | Codex hook receiver + installer that appends to `~/.codex/hooks.json` without clobbering Better Peacock + **liveness gate** for `codexStaleness.ts` | ordinary | **in progress** | — |
+| 3 | Claude scanner: **bounded reads** (625 MB / ~1,170 ms blocking per scan today), plus sibling-`cwd` fallback. **Keeps** the `sessions-index.json` path — see the correction above | ordinary | **merged** | [#17](https://github.com/chrismeehan20/central-brain/pull/17) |
+| 4a | **Fix the `session_meta` truncated read** — 8 KiB buffer vs p50 15 KB first lines was silently dropping 323 of 327 Codex sessions | ordinary | **merged** | [#18](https://github.com/chrismeehan20/central-brain/pull/18) |
+| 4b | Enrich Codex sessions from `state_*.sqlite` `threads` (`tokens_used`, `git_branch`, `git_origin_url`, `model`, `approval_mode`, `title`); covers threads whose rollout file was auto-cleaned | ordinary | **merged** | [#19](https://github.com/chrismeehan20/central-brain/pull/19) |
+| 4c | Codex hook receiver + installer that appends to `~/.codex/hooks.json` without clobbering Better Peacock + **liveness gate** for `codexStaleness.ts` | ordinary | **merged** | [#20](https://github.com/chrismeehan20/central-brain/pull/20) |
 | 14 | Surface Codex hook liveness in the dashboard. `GET /api/attention` now returns `hooks.codex`, but `AttentionPanel.tsx` renders `null` when the list is empty — and the empty state is exactly where it matters ("quiet, hooks live" vs "quiet, we're guessing"). Surfaced by Loop 4c | ordinary | queued | — |
-| 5a | **App path resolution** — `data/`, client dist and `hooks/` resolved explicitly and env-overridably instead of by `__dirname` arithmetic at three different depths. Prerequisite: bundling collapses all three | ordinary | **in progress** | — |
-| 5b | **esbuild single-file server bundle** + a boot smoke test | ordinary | **in progress** | — |
-| 5c | Tauri sidecar: spawn the bundle from `lib.rs` setup, probe-then-attach health check, `tauri-plugin-autostart`, remove launchd + `install-service`/`uninstall-service` | hard | **in progress** | — |
+| 5a | **App path resolution** — `data/`, client dist and `hooks/` resolved explicitly and env-overridably instead of by `__dirname` arithmetic at three different depths. Prerequisite: bundling collapses all three | ordinary | **merged** | [#21](https://github.com/chrismeehan20/central-brain/pull/21) |
+| 5b | **esbuild single-file server bundle** + a boot smoke test | ordinary | **merged** | [#22](https://github.com/chrismeehan20/central-brain/pull/22) |
+| 5c | Tauri sidecar: spawn the bundle from `lib.rs` setup, probe-then-attach health check, `tauri-plugin-autostart`, remove launchd + `install-service`/`uninstall-service` | hard | **merged** | [#23](https://github.com/chrismeehan20/central-brain/pull/23) |
 
 **Loop 5c must handle the macOS GUI PATH problem.** A `.app` launched from Finder
 or at login does **not** inherit a shell `PATH` — it gets roughly
@@ -415,3 +415,7 @@ React (S0-8) stays parked per the original D5 reasoning; it carries no advisorie
   devDependency used only by `npm run dev`, so the shipped app is unaffected —
   logged as Loop 11 rather than treated as urgent. The `dependabot.yml` landing
   in Loop 1 will also start proposing these bumps weekly.
+- **2026-08-03** — Table statuses reconciled with reality by the 0002 queue:
+  Loops 3-5c all merged days ago (PRs #17-#23) but were still marked in
+  progress here. Remaining queued items (6-15) stay parked behind
+  `0002-v13-codex-feedback.md`.
