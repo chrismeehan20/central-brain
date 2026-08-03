@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { aggregateCheckRollup, normalizeRunStatus } from "./ghClient.js";
+import { aggregateBranchRuns, aggregateCheckRollup, normalizeRunStatus } from "./ghClient.js";
 
 /**
  * `gh pr list --json statusCheckRollup` hands back a mixed array: CheckRun
@@ -127,4 +127,57 @@ test("no run at all — a branch that has never run CI — is undefined", () => 
 test("run status is normalized to lowercase regardless of the casing gh used", () => {
   assert.equal(normalizeRunStatus({ status: "COMPLETED", conclusion: "SUCCESS" }), "success");
   assert.equal(normalizeRunStatus({ status: "IN_PROGRESS", conclusion: null }), "pending");
+});
+
+// ---- per-workflow branch aggregation (round 2, R4) ----
+
+test("aggregateBranchRuns: one workflow's fresh green cannot hide another's standing red", () => {
+  assert.equal(
+    aggregateBranchRuns([
+      { workflowName: "CI", status: "completed", conclusion: "success" },
+      { workflowName: "Release", status: "completed", conclusion: "failure" },
+    ]),
+    "failure"
+  );
+});
+
+test("aggregateBranchRuns: only each workflow's LATEST run counts", () => {
+  assert.equal(
+    aggregateBranchRuns([
+      { workflowName: "CI", status: "completed", conclusion: "success" },
+      { workflowName: "CI", status: "completed", conclusion: "failure" }, // older, superseded
+    ]),
+    "success"
+  );
+});
+
+test("aggregateBranchRuns: an in-flight workflow makes the branch pending, not green", () => {
+  assert.equal(
+    aggregateBranchRuns([
+      { workflowName: "CI", status: "in_progress", conclusion: null },
+      { workflowName: "Release", status: "completed", conclusion: "success" },
+    ]),
+    "pending"
+  );
+});
+
+test("aggregateBranchRuns: all green across workflows is success; empty is undefined", () => {
+  assert.equal(
+    aggregateBranchRuns([
+      { workflowName: "CI", status: "completed", conclusion: "success" },
+      { workflowName: "Release", status: "completed", conclusion: "success" },
+    ]),
+    "success"
+  );
+  assert.equal(aggregateBranchRuns([]), undefined);
+});
+
+test("aggregateBranchRuns: rows without a workflow name each count individually", () => {
+  assert.equal(
+    aggregateBranchRuns([
+      { status: "completed", conclusion: "success" },
+      { status: "completed", conclusion: "failure" },
+    ]),
+    "failure"
+  );
 });
