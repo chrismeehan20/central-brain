@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { resolveNotifyScript } from "../appPaths.js";
+import { codexForwarderPath, installCodexForwarder, shellQuote } from "./forwarder.js";
 
 /**
  * Install/uninstall logic for Codex's ~/.codex/hooks.json, factored out of the
@@ -72,13 +72,21 @@ export function codexHooksPath(env: NodeJS.ProcessEnv = process.env, home: strin
   return path.join(codexHome && codexHome.length > 0 ? codexHome : path.join(home, ".codex"), "hooks.json");
 }
 
-/** Absolute path to hooks/notify-codex.sh — resolved by appPaths so a bundled server can be told where it is. */
+/**
+ * Absolute path to the *installed* forwarder — inside the data dir, not inside
+ * the checkout or the `.app`. See forwarder.ts: this is the one path that
+ * survives moving and upgrading the app, which is what makes the hook
+ * definition (and therefore the user's Codex approval of it) survive too.
+ */
 export function codexNotifyScriptPath(): string {
-  return resolveNotifyScript({ name: "notify-codex.sh" });
+  return codexForwarderPath();
 }
 
 export function buildCodexHookCommand(notifyScript: string = codexNotifyScriptPath()): string {
-  return `sh "${notifyScript}"`;
+  // `/bin/sh` rather than `sh`: the hook runs with whatever PATH Codex hands
+  // it, and single quotes rather than double so a home directory containing
+  // `$`, a backtick or a quote can't rewrite the command.
+  return `/bin/sh ${shellQuote(notifyScript)}`;
 }
 
 function buildEntry(command: string, event?: string): CodexHookEntry {
@@ -226,7 +234,10 @@ export interface InstallResult {
 
 export function installCodexHooks(opts: CodexHooksOptions): InstallResult {
   const { hooksPath } = opts;
-  const command = opts.command ?? buildCodexHookCommand();
+  // Put the forwarder in place *before* naming it in hooks.json. Writing a
+  // definition whose script does not exist yet would spend the user's one
+  // interactive approval on a command that can only fail.
+  const command = opts.command ?? buildCodexHookCommand(installCodexForwarder().path);
   const events = opts.events ?? CODEX_HOOK_EVENTS;
   const log = opts.log ?? console.log;
 

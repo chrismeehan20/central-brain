@@ -17,6 +17,7 @@ import { startCodexStalenessPoll } from "./poll/codexStaleness.js";
 import { startGithubPoller } from "./poll/githubPoller.js";
 import { startSummaryPoller } from "./poll/summaryPoller.js";
 import { startDetailPoller } from "./poll/detailPoller.js";
+import { installCodexForwarder, writeRuntimeEndpoint } from "./hooks/forwarder.js";
 
 const PORT = Number(process.env.PORT ?? 4317);
 const SCAN_INTERVAL_MS = 3 * 60 * 1000;
@@ -51,6 +52,31 @@ app.setNotFoundHandler((req, reply) => {
 // cannot leave an orphan holding this port.
 const watchingParent = watchParent();
 
+/**
+ * Refresh the two files the Codex hook forwarder depends on: the forwarder
+ * script itself (so an app upgrade upgrades it without rewriting hooks.json,
+ * which would cost the user a re-approval) and the endpoint it POSTs to (so a
+ * changed PORT needs no reinstall at all).
+ *
+ * Best-effort by design. Neither file is required for the dashboard to work,
+ * and a read-only or missing data dir must degrade to "hooks stop arriving",
+ * never to "the server won't start".
+ */
+function publishHookRuntime(): void {
+  try {
+    const endpointPath = writeRuntimeEndpoint(`http://127.0.0.1:${PORT}`);
+    app.log.info(`central-brain hook endpoint published: ${endpointPath}`);
+  } catch (err) {
+    app.log.warn({ err }, "could not publish the hook endpoint — Codex events may go to a stale port");
+  }
+  try {
+    const { path: forwarderPath, updated } = installCodexForwarder();
+    if (updated) app.log.info(`central-brain Codex hook forwarder updated: ${forwarderPath}`);
+  } catch (err) {
+    app.log.warn({ err }, "could not install the Codex hook forwarder");
+  }
+}
+
 app
   .listen({ port: PORT, host: "127.0.0.1" })
   .then(() => {
@@ -59,6 +85,7 @@ app
     app.log.info(`central-brain data dir: ${dataDir}`);
     app.log.info(`central-brain client dir: ${clientDist}`);
     app.log.info(`central-brain parent watchdog: ${watchingParent ? "armed" : "off"}`);
+    publishHookRuntime();
     runScan();
     setInterval(runScan, SCAN_INTERVAL_MS);
     startWatcher();
