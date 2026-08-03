@@ -11,10 +11,13 @@ import { codexForwarderPath, installCodexForwarder, shellQuote } from "./forward
  * supports `{"type": "command", ...}` handlers — there is no native "http"
  * type — so we install a command that curls the event JSON to the server.
  *
- * Append-only, by rule: a real machine already has other people's handlers in
- * here (Better Peacock's, for one), and Codex's hook trust is keyed to a hash
- * of this whole file. Rewriting or reordering someone else's handler would be
- * both a data loss and a silent revocation of their trust approval.
+ * We only ever touch our OWN entries, by rule: a real machine already has
+ * other people's handlers in here (Better Peacock's, for one). Codex keys hook
+ * trust to each exact hook definition — not, as this comment previously
+ * claimed, to a hash of the whole file — so rewriting or reordering someone
+ * else's handler would be a data loss AND a silent revocation of an approval
+ * that had nothing to do with us. Conversely, changing one of ours revokes
+ * only ours, which is why repair is safe to offer.
  */
 
 /**
@@ -89,13 +92,37 @@ export function buildCodexHookCommand(notifyScript: string = codexNotifyScriptPa
   return `/bin/sh ${shellQuote(notifyScript)}`;
 }
 
-function buildEntry(command: string, event?: string): CodexHookEntry {
+/**
+ * The canonical definition — the single source of truth for what an installed
+ * central-brain hook looks like. "Installed correctly" means an entry that
+ * deep-equals this, not merely an entry that mentions our script: an entry
+ * naming a checkout that has since moved runs nothing at all, and treating it
+ * as installed is what made repair impossible.
+ */
+export function desiredCodexEntry(command: string, event?: string): CodexHookEntry {
   return {
     type: "command",
     command,
     timeout: event === "SessionEnd" ? SESSION_END_TIMEOUT_SECONDS : HOOK_TIMEOUT_SECONDS,
     statusMessage: CODEX_STATUS_MESSAGE,
   };
+}
+
+/**
+ * Whether an owned entry already IS the canonical definition.
+ *
+ * Compared field by field rather than by JSON string, so key order in the
+ * user's file is irrelevant, and exhaustively rather than on `command` alone,
+ * so an entry with a stale timeout or a missing status message is repaired
+ * too. An entry carrying extra keys we don't write is NOT current — we would
+ * rather rewrite (and cost one re-approval) than leave a definition we cannot
+ * fully account for.
+ */
+export function entryIsCurrent(entry: CodexHookEntry, command: string, event?: string): boolean {
+  const desired = desiredCodexEntry(command, event);
+  const keys = Object.keys(entry);
+  if (keys.length !== Object.keys(desired).length) return false;
+  return keys.every((key) => entry[key] === desired[key as keyof CodexHookEntry]);
 }
 
 /**
@@ -114,8 +141,19 @@ function groupContainsOurs(group: CodexHookGroup): boolean {
 
 export class CodexHooksConfigError extends Error {}
 
-/** True when every event we care about already has one of our entries. */
-export function codexHooksInstalled(hooksPath: string, events: readonly string[] = CODEX_HOOK_EVENTS): boolean {
+/**
+ * True when every event we care about carries the CURRENT definition.
+ *
+ * Deliberately not "has an entry of ours". An entry naming a path that no
+ * longer exists is not an install, it is a corpse: Codex runs it, `/bin/sh`
+ * fails to find the script, and nothing arrives. Reporting that as installed
+ * is what hid the Install button and made the state unrecoverable from the UI.
+ */
+export function codexHooksInstalled(
+  hooksPath: string,
+  events: readonly string[] = CODEX_HOOK_EVENTS,
+  command: string = buildCodexHookCommand()
+): boolean {
   let config: CodexHooksConfig;
   try {
     config = readCodexHooksConfig(hooksPath);
@@ -123,7 +161,11 @@ export function codexHooksInstalled(hooksPath: string, events: readonly string[]
     return false; // unparseable file = not installed; install surfaces the real error
   }
   if (!config.hooks) return false;
-  return events.every((event) => (config.hooks?.[event] ?? []).some(groupContainsOurs));
+  return events.every((event) =>
+    (config.hooks?.[event] ?? []).some((group) =>
+      (group.hooks ?? []).some((entry) => entryIsOurs(entry) && entryIsCurrent(entry, command, event))
+    )
+  );
 }
 
 /**
@@ -163,10 +205,31 @@ export function codexHooksTrusted(hooksPath: string, events: readonly string[] =
  * write, and clobbering them is unrecoverable.
  */
 export function readCodexHooksConfig(hooksPath: string): CodexHooksConfig {
-  if (!fs.existsSync(hooksPath)) return {};
+  return loadCodexHooks(hooksPath).config;
+}
+
+interface LoadedCodexHooks {
+  config: CodexHooksConfig;
+  /** The exact bytes parsed — what a backup must capture. Undefined when there is no file. */
+  raw: string | undefined;
+  /** The stat taken alongside the read, for the pre-rename conflict check. */
+  stat: fs.Stats | undefined;
+}
+
+/**
+ * Read the config together with the evidence needed to write it back safely:
+ * the bytes it came from and the stat it had at the time.
+ */
+function loadCodexHooks(hooksPath: string): LoadedCodexHooks {
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(hooksPath);
+  } catch {
+    return { config: {}, raw: undefined, stat: undefined };
+  }
 
   const raw = fs.readFileSync(hooksPath, "utf8");
-  if (raw.trim() === "") return {};
+  if (raw.trim() === "") return { config: {}, raw, stat };
 
   let parsed: unknown;
   try {
@@ -200,20 +263,117 @@ export function readCodexHooksConfig(hooksPath: string): CodexHooksConfig {
       }
     }
   }
-  return config;
+  return { config, raw, stat };
 }
 
-function backup(hooksPath: string, log: Logger): string | undefined {
-  if (!fs.existsSync(hooksPath)) return undefined;
-  const backupPath = `${hooksPath}.bak`;
-  fs.copyFileSync(hooksPath, backupPath);
+/** How many timestamped backups of hooks.json we keep before pruning the oldest. */
+const BACKUPS_KEPT = 5;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Raised when the file changed underneath us twice — the user's edit wins, we stop. */
+export class CodexHooksConflictError extends Error {}
+
+/**
+ * Snapshot the file we are about to rewrite.
+ *
+ * Timestamped, because the old single `.bak` was overwritten on every install:
+ * a second run destroyed the only copy of the pre-install state, which is
+ * exactly the copy someone reaches for. `raw` is the bytes we actually parsed,
+ * so a backup can never capture a concurrent edit we didn't reconcile against.
+ */
+function backup(hooksPath: string, raw: string, log: Logger): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  // Two writes inside the same millisecond would otherwise land on the same
+  // name, and the second would clobber the first — the very bug timestamping
+  // is here to fix, just with a narrower window. `wx` fails rather than
+  // overwrites, so the suffix is only paid for when it is actually needed.
+  let backupPath = `${hooksPath}.${stamp}.bak`;
+  for (let n = 1; ; n++) {
+    try {
+      fs.writeFileSync(backupPath, raw, { mode: 0o600, flag: "wx" });
+      break;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      backupPath = `${hooksPath}.${stamp}-${n}.bak`;
+    }
+  }
   log(`Backed up existing Codex hooks to ${backupPath}`);
+  pruneBackups(hooksPath, log);
   return backupPath;
 }
 
-function write(hooksPath: string, config: CodexHooksConfig): void {
+function pruneBackups(hooksPath: string, log: Logger): void {
+  const dir = path.dirname(hooksPath);
+  // Matches only the names we generate. A hand-made `hooks.json.before-x.bak`
+  // is someone's deliberate safety copy and is not ours to delete.
+  // The trailing `-N` is the same-millisecond tiebreak `backup()` may add.
+  const ours = new RegExp(
+    `^${escapeRegExp(path.basename(hooksPath))}\\.\\d{4}-\\d{2}-\\d{2}T[\\d-]+Z(-\\d+)?\\.bak$`
+  );
+  let stale: string[];
+  try {
+    stale = fs
+      .readdirSync(dir)
+      .filter((name) => ours.test(name))
+      .sort() // ISO timestamps sort chronologically as strings
+      .slice(0, -BACKUPS_KEPT);
+  } catch {
+    return; // pruning is housekeeping — never fail an install over it
+  }
+  for (const name of stale) {
+    try {
+      fs.rmSync(path.join(dir, name));
+    } catch {
+      log(`Could not remove the old backup ${name} — harmless, but it will accumulate.`);
+    }
+  }
+}
+
+/**
+ * Write via a same-directory temp file and an atomic rename, refusing if the
+ * original changed since we read it.
+ *
+ * A plain `writeFileSync` is a truncate-then-write: a crash, a full disk, or
+ * two writers at once leaves hooks.json half-written, which Codex then cannot
+ * parse — and an unparseable hooks.json disables every hook in it, including
+ * handlers we don't own. `expected` is the stat we took at read time; a
+ * mismatch means someone edited the file (or `/hooks` stamped a trusted_hash
+ * into it) while we were deciding, so our reconciliation is stale.
+ */
+function writeConfig(hooksPath: string, config: CodexHooksConfig, expected: fs.Stats | undefined): void {
   fs.mkdirSync(path.dirname(hooksPath), { recursive: true });
-  fs.writeFileSync(hooksPath, JSON.stringify(config, null, 2) + "\n");
+  const contents = JSON.stringify(config, null, 2) + "\n";
+  // Match the file we're replacing, so a user who tightened permissions on
+  // hooks.json doesn't silently get them loosened back.
+  const mode = expected ? expected.mode & 0o777 : 0o600;
+  const tmp = path.join(path.dirname(hooksPath), `.${path.basename(hooksPath)}.${process.pid}.tmp`);
+  fs.writeFileSync(tmp, contents, { mode });
+  try {
+    if (!statMatches(hooksPath, expected)) {
+      throw new CodexHooksConflictError(
+        `${hooksPath} changed while central-brain was updating it — nothing was written.`
+      );
+    }
+    fs.renameSync(tmp, hooksPath);
+  } catch (err) {
+    fs.rmSync(tmp, { force: true });
+    throw err;
+  }
+}
+
+/** True when the file on disk still looks like the one we read. */
+function statMatches(hooksPath: string, expected: fs.Stats | undefined): boolean {
+  let current: fs.Stats | undefined;
+  try {
+    current = fs.statSync(hooksPath);
+  } catch {
+    current = undefined;
+  }
+  if (!expected || !current) return !expected && !current;
+  return current.mtimeMs === expected.mtimeMs && current.size === expected.size;
 }
 
 export type Logger = (message: string) => void;
@@ -226,12 +386,91 @@ export interface CodexHooksOptions {
 }
 
 export interface InstallResult {
+  /** Events that had no entry of ours at all. */
   added: string[];
+  /** Events already carrying the exact canonical definition — untouched, approval intact. */
   alreadyPresent: string[];
+  /** Events whose entry of ours was stale (moved path, old format) and was rewritten. */
+  updated: string[];
+  /** Events where duplicate entries of ours collapsed to one. */
+  deduplicated: string[];
   wrote: boolean;
+  /**
+   * True when a definition changed, so Codex's approval of it no longer
+   * applies. The user must re-approve via `/hooks` before hooks fire again —
+   * the single most important thing to tell them after a repair.
+   */
+  requiresReapproval: boolean;
   backupPath?: string;
 }
 
+/** What reconciliation decided to do about one event, before anything is written. */
+type EventPlan = "unchanged" | "added" | "updated" | "deduplicated";
+
+/**
+ * Decide, without writing, what each event needs — and mutate `config` into the
+ * desired state.
+ *
+ * The rule for leaving a file alone is deliberately strict: an event is
+ * `unchanged` only when exactly one group holds exactly one entry of ours and
+ * that entry deep-equals the canonical definition. That group keeps every key
+ * it had, including the `trusted_hash` Codex stamps on approval — the whole
+ * point of not rewriting it.
+ *
+ * Anything else is rebuilt: our entries are stripped from wherever they are
+ * (including out of a group someone hand-merged them into, whose foreign
+ * entries and approval are left untouched) and one canonical group is appended.
+ */
+function planEvent(config: CodexHooksConfig, event: string, command: string): EventPlan {
+  const groups = config.hooks?.[event] ?? [];
+  const ourEntries = groups.flatMap((group) => (group.hooks ?? []).filter(entryIsOurs));
+
+  if (ourEntries.length === 0) {
+    (config.hooks ??= {})[event] ??= [];
+    config.hooks[event].push({ hooks: [desiredCodexEntry(command, event)] });
+    return "added";
+  }
+
+  const owningGroups = groups.filter(groupContainsOurs);
+  const soleGroup = owningGroups.length === 1 ? owningGroups[0] : undefined;
+  const isCanonical =
+    ourEntries.length === 1 &&
+    soleGroup !== undefined &&
+    (soleGroup.hooks ?? []).length === 1 &&
+    entryIsCurrent(ourEntries[0], command, event);
+  if (isCanonical) return "unchanged";
+
+  // Was any of what we're replacing already correct? That distinguishes "your
+  // install was stale and got repaired" from "you had duplicates".
+  const hadCurrent = ourEntries.some((entry) => entryIsCurrent(entry, command, event));
+
+  const kept: CodexHookGroup[] = [];
+  for (const group of groups) {
+    if (!groupContainsOurs(group)) {
+      kept.push(group); // foreign group — untouched, key order and all
+      continue;
+    }
+    const foreign = (group.hooks ?? []).filter((entry) => !entryIsOurs(entry));
+    // A group that also holds someone else's handler keeps it — and keeps its
+    // trusted_hash, which covers their definition as much as ours.
+    if (foreign.length > 0) kept.push({ ...group, hooks: foreign });
+  }
+  kept.push({ hooks: [desiredCodexEntry(command, event)] });
+  (config.hooks ??= {})[event] = kept;
+
+  return hadCurrent ? "deduplicated" : "updated";
+}
+
+/**
+ * Converge $CODEX_HOME/hooks.json on the canonical definition.
+ *
+ * Previously this was append-only and treated *any* entry mentioning our
+ * script as an idempotent success. That made the common failure unrecoverable:
+ * once an entry pointed at a checkout that had moved or an `.app` that had
+ * been replaced, the hook ran nothing, the dashboard reported "installed", the
+ * Install button disappeared, and re-running install wrote nothing. The only
+ * way out was hand-editing hooks.json.
+ */
 export function installCodexHooks(opts: CodexHooksOptions): InstallResult {
   const { hooksPath } = opts;
   // Put the forwarder in place *before* naming it in hooks.json. Writing a
@@ -241,39 +480,64 @@ export function installCodexHooks(opts: CodexHooksOptions): InstallResult {
   const events = opts.events ?? CODEX_HOOK_EVENTS;
   const log = opts.log ?? console.log;
 
-  const config = readCodexHooksConfig(hooksPath);
-  config.hooks ??= {};
+  // One retry, because the likeliest concurrent writer is Codex itself
+  // stamping a trusted_hash — a change we want to reconcile against, not
+  // clobber. A second conflict means someone is actively editing; stop.
+  for (let attempt = 0; ; attempt++) {
+    const { config, raw, stat } = loadCodexHooks(hooksPath);
 
-  const added: string[] = [];
-  const alreadyPresent: string[] = [];
+    const plans = new Map<EventPlan, string[]>([
+      ["unchanged", []],
+      ["added", []],
+      ["updated", []],
+      ["deduplicated", []],
+    ]);
+    for (const event of events) plans.get(planEvent(config, event, command))!.push(event);
 
-  for (const event of events) {
-    const groups = (config.hooks[event] ??= []);
-    if (groups.some(groupContainsOurs)) {
-      alreadyPresent.push(event); // idempotent no-op
-      continue;
+    const added = plans.get("added")!;
+    const updated = plans.get("updated")!;
+    const deduplicated = plans.get("deduplicated")!;
+    const alreadyPresent = plans.get("unchanged")!;
+    const wrote = added.length + updated.length + deduplicated.length > 0;
+
+    if (!wrote) {
+      log(`central-brain Codex hooks are already current in ${hooksPath} — nothing to do.`);
+      logTrustNotice(log, hooksPath, false);
+      return { added, alreadyPresent, updated, deduplicated, wrote: false, requiresReapproval: false };
     }
-    // Appended as its own group, so it never touches handlers we don't own
-    // and can be removed again independently.
-    groups.push({ hooks: [buildEntry(command, event)] });
-    added.push(event);
-  }
 
-  if (added.length === 0) {
-    log(`central-brain Codex hooks are already installed in ${hooksPath} — nothing to do.`);
-    logTrustNotice(log, hooksPath);
-    return { added, alreadyPresent, wrote: false };
-  }
+    // Backing up before the conflict check would litter the directory on every
+    // failed attempt, so both happen inside the retry.
+    let backupPath: string | undefined;
+    try {
+      if (raw !== undefined) backupPath = backup(hooksPath, raw, log);
+      writeConfig(hooksPath, config, stat);
+    } catch (err) {
+      if (err instanceof CodexHooksConflictError && attempt === 0) continue;
+      throw err;
+    }
 
-  const backupPath = backup(hooksPath, log);
-  write(hooksPath, config);
-  log(`Installed central-brain Codex hooks in ${hooksPath} for: ${added.join(", ")}`);
-  if (alreadyPresent.length > 0) {
-    log(`Already present (left alone): ${alreadyPresent.join(", ")}`);
+    if (added.length > 0) log(`Installed central-brain Codex hooks for: ${added.join(", ")}`);
+    if (updated.length > 0) {
+      log(`Repaired stale central-brain hook definitions for: ${updated.join(", ")}`);
+      log("  (they pointed somewhere that no longer exists, so Codex was running nothing.)");
+    }
+    if (deduplicated.length > 0) {
+      log(`Collapsed duplicate central-brain entries for: ${deduplicated.join(", ")}`);
+    }
+    if (alreadyPresent.length > 0) log(`Already current (left alone): ${alreadyPresent.join(", ")}`);
+    log("Your existing Codex hooks were preserved — only our own entries were touched.");
+    logTrustNotice(log, hooksPath, updated.length > 0 || deduplicated.length > 0);
+    return {
+      added,
+      alreadyPresent,
+      updated,
+      deduplicated,
+      wrote: true,
+      requiresReapproval: true,
+      ...(backupPath ? { backupPath } : {}),
+    };
   }
-  log("Your existing Codex hooks were preserved — we only appended new entries.");
-  logTrustNotice(log, hooksPath);
-  return { added, alreadyPresent, wrote: true, ...(backupPath ? { backupPath } : {}) };
 }
 
 export interface UninstallResult {
@@ -291,7 +555,7 @@ export function uninstallCodexHooks(opts: Omit<CodexHooksOptions, "command" | "e
     return { removed: 0, wrote: false };
   }
 
-  const config = readCodexHooksConfig(hooksPath);
+  const { config, raw, stat } = loadCodexHooks(hooksPath);
   if (!config.hooks) {
     log("No Codex hooks configured — nothing to uninstall.");
     return { removed: 0, wrote: false };
@@ -329,32 +593,39 @@ export function uninstallCodexHooks(opts: Omit<CodexHooksOptions, "command" | "e
     return { removed: 0, wrote: false };
   }
 
-  const backupPath = backup(hooksPath, log);
-  write(hooksPath, config);
+  const backupPath = raw !== undefined ? backup(hooksPath, raw, log) : undefined;
+  writeConfig(hooksPath, config, stat);
   log(`Removed ${removed} central-brain Codex hook entr${removed === 1 ? "y" : "ies"}. Your other Codex hooks were left untouched.`);
-  log("Codex re-prompts for hook approval on the next session, because the config hash changed.");
+  log("Your other hooks keep their approval: Codex trusts each hook definition");
+  log("separately, and none of theirs changed.");
   return { removed, wrote: true, ...(backupPath ? { backupPath } : {}) };
 }
 
 /**
  * The part that must not be skipped. Codex hooks silently do nothing until the
- * user approves them once, interactively, and approval is keyed to a hash of
- * the hook config — so installing these invalidates any approval already
- * granted, for every handler in the file.
+ * user approves them once, interactively, and approval is keyed to the exact
+ * hook definition — so a definition we just wrote or rewrote starts untrusted,
+ * while every OTHER handler in the file keeps the approval it already had.
  */
-function logTrustNotice(log: Logger, hooksPath: string): void {
+function logTrustNotice(log: Logger, hooksPath: string, repaired: boolean): void {
   log("");
-  log("IMPORTANT — these hooks will NOT fire until you approve them inside Codex.");
-  log("Codex only runs hook definitions you have explicitly trusted:");
-  log("  1. Start a new Codex session (`codex`) — it should ask you to review the new hooks.");
-  log("  2. Approve them.");
+  if (repaired) {
+    log("IMPORTANT — repairing these hooks changed their definitions, so Codex's");
+    log("previous approval of them no longer applies. They will not fire until you");
+    log("approve them again:");
+  } else {
+    log("IMPORTANT — these hooks will NOT fire until you approve them inside Codex.");
+    log("Codex only runs hook definitions you have explicitly trusted:");
+  }
+  log("  1. Start a new Codex session (`codex`) and run `/hooks`.");
+  log("  2. Review and approve the central-brain entries.");
   log(`  3. Confirm it took:  grep trusted_hash ${hooksPath}`);
   log("     Codex stamps a trusted_hash into each approved hook group; every");
   log("     central-brain group carrying one is the sign it worked.");
   log("");
-  log("Trust is per hook definition, so our new entries start untrusted even if");
-  log("you approved other hooks before. Until you approve them, they run silently");
-  log("never, and Codex does not warn you about it.");
+  log("Trust is per hook definition, so ours start untrusted even if you approved");
+  log("other hooks before — and, equally, hooks you did not change keep working.");
+  log("Until you approve ours, they run silently never, and Codex does not warn you.");
   log("");
   log("Until then, central-brain keeps falling back to its Codex staleness");
   log("heuristic, which guesses from rollout-file activity and can be wrong.");

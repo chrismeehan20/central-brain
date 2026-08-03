@@ -157,8 +157,8 @@ parse. The forwarder always exits 0 and stays well inside Codex's 3s
 
 | Loop | Item | Tier | Status |
 |---|---|---|---|
-| 1 | Stable forwarder location + runtime endpoint discovery (D1, D2) | ordinary | pending |
-| 2 | Desired-state reconciliation + atomic writes & timestamped backups (D3) | ordinary | pending |
+| 1 | Stable forwarder location + runtime endpoint discovery (D1, D2) | ordinary | **merged** (#45) |
+| 2 | Desired-state reconciliation + atomic writes & timestamped backups (D3) | ordinary | **in review** |
 | 3 | Installation identity + receipt-qualified liveness (D4) | ordinary | pending |
 | 4 | `inspectCodexHooks()` diagnostic status model (D5, D-C) | ordinary | pending |
 | 5 | Durable event delivery: spool + drain (D6) | hard | pending |
