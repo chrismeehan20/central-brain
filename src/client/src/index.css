@@ -1484,6 +1484,51 @@ button.activity__text--open:hover {
   color: var(--accent);
 }
 
+/* The "why", under the "what". Muted and smaller: the state line is the
+   headline, this is the explanation you read only if you need it. */
+.hooks__detail {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.74rem;
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+.hooks__command {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+}
+
+.hooks__command code {
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.74rem;
+  color: var(--ink);
+}
+
+.hooks__copy {
+  padding: 0.05rem 0.4rem;
+  font-size: 0.7rem;
+}
+
+.hooks__paths {
+  margin: 0.4rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--muted);
+  /* Absolute paths are long and must not push the settings panel wider. */
+  overflow-wrap: anywhere;
+}
+
+.hooks__watching {
+  margin: 0.4rem 0 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
 .setup__prefs {
   display: flex;
   flex-direction: column;

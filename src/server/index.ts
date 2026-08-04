@@ -17,7 +17,8 @@ import { startCodexStalenessPoll } from "./poll/codexStaleness.js";
 import { startGithubPoller } from "./poll/githubPoller.js";
 import { startSummaryPoller } from "./poll/summaryPoller.js";
 import { startDetailPoller } from "./poll/detailPoller.js";
-import { installCodexForwarder, writeRuntimeEndpoint } from "./hooks/forwarder.js";
+import { ensureInstallId, installCodexForwarder, writeRuntimeEndpoint } from "./hooks/forwarder.js";
+import { startSpoolDrain } from "./poll/spoolDrain.js";
 
 const PORT = Number(process.env.PORT ?? 4317);
 const SCAN_INTERVAL_MS = 3 * 60 * 1000;
@@ -65,6 +66,9 @@ const watchingParent = watchParent();
 function publishHookRuntime(): void {
   try {
     const endpointPath = writeRuntimeEndpoint(`http://127.0.0.1:${PORT}`);
+    // Created on first run and left alone afterwards — only install, repair
+    // and uninstall rotate it, because only those change what is wired up.
+    ensureInstallId();
     app.log.info(`central-brain hook endpoint published: ${endpointPath}`);
   } catch (err) {
     app.log.warn({ err }, "could not publish the hook endpoint — Codex events may go to a stale port");
@@ -93,6 +97,7 @@ app
     startGithubPoller();
     startSummaryPoller();
     startDetailPoller();
+    startSpoolDrain((m) => app.log.info(m));
   })
   .catch((err) => {
     app.log.error(err);

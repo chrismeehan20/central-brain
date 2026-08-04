@@ -1,136 +1,209 @@
-import { useEffect, useState } from "react";
-import type { HooksSetupStatus } from "@shared/types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { CodexHooksDiagnosis, HooksSetupStatus } from "@shared/types";
 import { dismissHooksSetup, fetchHooksStatus, installHooks } from "./api";
+import {
+  ACTIONABLE_CODEX_STATES,
+  claudeRow,
+  codexRow,
+  IN_FLIGHT_CODEX_STATES,
+  onboardingVisibility,
+  type HookRow,
+} from "./hooksCopy";
 
 /**
  * Dashboard-driven hook install — the "Connect your tools" card.
  *
  * `mode="onboarding"` renders as a first-run card and hides itself once there
- * is nothing actionable (every detected tool has hooks installed) or the user
- * clicks Later. `mode="settings"` is the same rows embedded in the ⚙ panel,
- * always visible so the state can be checked (and Codex's approval nagged
- * about) forever after.
+ * is nothing actionable or the user clicks Later. `mode="settings"` is the
+ * same rows embedded in the ⚙ panel, always visible so the state can be
+ * checked forever after.
  *
- * Status is polled while visible: the interesting transitions — the user
- * approves the config inside Codex, the first real event lands — happen
- * outside the browser, and the panel should notice without a reload.
+ * The Codex row renders the server's single `diagnosis.overall` rather than
+ * combining `installed` / `trusted` / `live` itself. Those three could
+ * disagree, and this component's own if-ordering used to decide which
+ * disagreement won — which is how a hook pointing at a path that no longer
+ * existed displayed as "Connected — events are arriving".
  */
 interface Props {
   mode: "onboarding" | "settings";
   /**
    * Onboarding-only: reports whether this panel currently has something for
-   * the user to act on (install a hook, approve Codex). `App` uses this to
-   * hold the API-key card back until hooks onboarding is out of the way —
-   * installed, dismissed, or simply unreachable (see the fetch-rejection
-   * path below, which reports `false` rather than leaving the caller stuck).
+   * the user to act on. `App` uses this to hold the API-key card back until
+   * hooks onboarding is out of the way — installed, dismissed, or simply
+   * unreachable (see the fetch-rejection path below, which reports `false`
+   * rather than leaving the caller stuck).
    */
   onOnboardingActionable?: (actionable: boolean) => void;
 }
 
 const POLL_MS = 15_000;
 
+/**
+ * While the user is mid-flow — they've just installed, or been told to go and
+ * approve in Codex — the interesting transition happens in another app and we
+ * want it reflected almost immediately. Outside that window a 15s poll is
+ * plenty for something that changes a few times a year.
+ */
+const VERIFYING_POLL_MS = 2_000;
+const VERIFYING_WINDOW_MS = 2 * 60_000;
+
 export default function HooksPanel({ mode, onOnboardingActionable }: Props) {
   const [status, setStatus] = useState<HooksSetupStatus | null>(null);
   const [busy, setBusy] = useState<"claude" | "codex" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  // A timestamp rather than a boolean, so the fast poll expires on its own
+  // instead of running until the panel unmounts.
+  const [verifyingUntil, setVerifyingUntil] = useState(0);
+  const verifying = verifyingUntil > Date.now();
+
+  // Read inside the interval callback so changing the rate doesn't need the
+  // effect (and the request in flight) torn down.
+  const verifyingRef = useRef(verifyingUntil);
+  verifyingRef.current = verifyingUntil;
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const schedule = () => {
+      const rate = verifyingRef.current > Date.now() ? VERIFYING_POLL_MS : POLL_MS;
+      timer = setTimeout(load, rate);
+    };
     const load = () =>
       fetchHooksStatus()
         .then((s) => {
-          if (!cancelled) setStatus(s);
+          if (cancelled) return;
+          setStatus(s);
+          schedule();
         })
         .catch(() => {
           // Quiet: a failed status fetch must not break the dashboard around
           // it. It also must not leave onboarding stuck waiting on hooks
           // forever, so tell the caller there's nothing actionable here.
-          if (!cancelled) onOnboardingActionable?.(false);
+          if (cancelled) return;
+          onOnboardingActionable?.(false);
+          schedule();
         });
+
     load();
-    const interval = setInterval(load, POLL_MS);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      clearTimeout(timer);
     };
     // `onOnboardingActionable` is a useState setter from the caller (stable
-    // identity across renders), so listing it here doesn't tear down and
-    // restart the poll loop.
+    // identity across renders), so listing it here doesn't restart the loop.
   }, [onOnboardingActionable]);
 
+  const claudeNeedsUser = status ? status.claude.dirExists && !status.claude.installed : false;
+  // Two predicates, deliberately: `needsUser` gates the API-key card below and
+  // must not include a passive wait, or someone who approved and then didn't
+  // reopen Codex would be blocked from it indefinitely. `inFlight` decides
+  // whether this card stays on screen, and does include that wait.
+  const needsUser = status
+    ? claudeNeedsUser || ACTIONABLE_CODEX_STATES.has(status.codex.diagnosis.overall)
+    : false;
+  const inFlight = status
+    ? claudeNeedsUser || IN_FLIGHT_CODEX_STATES.has(status.codex.diagnosis.overall)
+    : false;
+
+  // Remembers that a flow was under way, so the success state is shown to
+  // someone who finished one — and never to someone who just loaded a
+  // dashboard that already worked.
+  const sawIncomplete = useRef(false);
+  useEffect(() => {
+    if (inFlight) sawIncomplete.current = true;
+  }, [inFlight]);
+
   // Derive + report actionability whenever status changes (initial load,
-  // install, or dismiss) — same boolean the render below uses to decide
-  // onboarding visibility, kept in one place so they can't drift.
+  // install, or dismiss) — same value the render below uses, kept in one place
+  // so they can't drift.
   useEffect(() => {
     if (!status) return;
-    const actionable =
-      (status.claude.dirExists && !status.claude.installed) ||
-      (status.codex.dirExists && !status.codex.installed);
-    const codexNeedsApproval =
-      status.codex.installed && !status.codex.live && !status.codex.trusted;
-    onOnboardingActionable?.(!status.setupDismissed && (actionable || codexNeedsApproval));
-  }, [status, onOnboardingActionable]);
+    onOnboardingActionable?.(!status.setupDismissed && needsUser);
+  }, [status, needsUser, onOnboardingActionable]);
 
-  if (!status) return null;
-
-  const actionable =
-    (status.claude.dirExists && !status.claude.installed) ||
-    (status.codex.dirExists && !status.codex.installed);
-  const codexNeedsApproval =
-    status.codex.installed && !status.codex.live && !status.codex.trusted;
-
-  // The onboarding card earns its screen space only while there is a button to
-  // click or an approval to chase; the settings copy is always reachable.
-  if (mode === "onboarding" && (status.setupDismissed || !(actionable || codexNeedsApproval))) {
-    return null;
-  }
-
-  async function run(tool: "claude" | "codex") {
+  const run = useCallback(async (tool: "claude" | "codex") => {
     setBusy(tool);
     setError(null);
     try {
       setStatus(await installHooks(tool));
+      // Whatever just happened, the next thing is a transition we can't see:
+      // the user approving inside Codex, or the first event landing.
+      setVerifyingUntil(Date.now() + VERIFYING_WINDOW_MS);
     } catch (err) {
       setError((err as Error).message ?? String(err));
     } finally {
       setBusy(null);
     }
-  }
+  }, []);
 
-  function describe(tool: "claude" | "codex"): string {
-    const t = tool === "claude" ? status!.claude : status!.codex;
-    if (!t.dirExists) return "Not detected on this Mac.";
-    if (!t.installed) return "Hooks not installed — alerts fall back to slower scanning.";
-    if (t.live) return "Connected — events are arriving.";
-    if (tool === "codex") {
-      // `trusted` reads the trusted_hash Codex stamps into each approved hook
-      // group — the only proof short of a live event that our handlers can run.
-      return status!.codex.trusted
-        ? "Approved — waiting for the first event."
-        : "Installed — one step left: start a Codex session and approve the new hooks when it asks. Codex runs none of them until you do.";
-    }
-    return "Installed — waiting for the first session event.";
-  }
-
-  const row = (tool: "claude" | "codex", label: string) => {
-    const t = tool === "claude" ? status!.claude : status!.codex;
-    return (
-      <div className="hooks__row">
-        <span className="hooks__tool">{label}</span>
-        <span className={`hooks__state ${t.live ? "hooks__state--live" : ""}`}>{describe(tool)}</span>
-        {t.dirExists && !t.installed && (
-          <button onClick={() => run(tool)} disabled={busy !== null}>
-            {busy === tool ? "Installing…" : "Install"}
-          </button>
-        )}
-      </div>
+  const copy = useCallback((text: string) => {
+    void navigator.clipboard?.writeText(text).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      },
+      () => {
+        /* clipboard denied — the command is on screen to type by hand */
+      }
     );
-  };
+  }, []);
 
+  if (!status) return null;
+
+  const { visible, celebrating } = onboardingVisibility({
+    setupDismissed: status.setupDismissed,
+    inFlight,
+    sawIncomplete: sawIncomplete.current,
+  });
+  // The onboarding card earns its screen space while setup is unfinished, plus
+  // one last render once it finishes — the payoff. The settings copy is always
+  // reachable regardless.
+  if (mode === "onboarding" && !visible) return null;
+
+  const renderRow = (tool: "claude" | "codex", label: string, row: HookRow) => (
+    <div className="hooks__row" key={tool}>
+      <span className="hooks__tool">{label}</span>
+      <span className={`hooks__state ${row.good ? "hooks__state--live" : ""}`}>
+        {row.state}
+        {row.detail && <span className="hooks__detail">{row.detail}</span>}
+        {row.command && (
+          <span className="hooks__command">
+            <code>{row.command}</code>
+            <button type="button" className="hooks__copy" onClick={() => copy(row.command!)}>
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </span>
+        )}
+      </span>
+      {row.action && (
+        <button onClick={() => run(tool)} disabled={busy !== null}>
+          {busy === tool ? row.action.busyLabel : row.action.label}
+        </button>
+      )}
+    </div>
+  );
+
+  const diagnosis = status.codex.diagnosis;
   const body = (
     <>
-      {row("claude", "Claude Code")}
-      {row("codex", "Codex")}
+      {renderRow("claude", "Claude Code", claudeRow(status.claude))}
+      {renderRow("codex", "Codex", codexRow(diagnosis, diagnosis.lastEventAt))}
+      {mode === "settings" && diagnosis.overall !== "not_detected" && (
+        <p className="hooks__paths">
+          Codex folder: <code>{diagnosis.codexHome}</code>
+          <br />
+          Forwarder: <code>{diagnosis.forwarderPath}</code>
+          {diagnosis.spool && diagnosis.spool.pending > 0 && (
+            <>
+              <br />
+              {diagnosis.spool.pending} event{diagnosis.spool.pending === 1 ? "" : "s"} waiting to be replayed.
+            </>
+          )}
+        </p>
+      )}
+      {verifying && <p className="hooks__watching">Watching for changes…</p>}
       {error && <p className="setup__error">{error}</p>}
     </>
   );
@@ -147,23 +220,31 @@ export default function HooksPanel({ mode, onOnboardingActionable }: Props) {
   return (
     <section className="setup setup--onboarding">
       <div className="setup__header">
-        <h2 className="setup__title">Get alerts the moment an agent needs you</h2>
+        <h2 className="setup__title">
+          {celebrating ? "You're connected" : "Get alerts the moment an agent needs you"}
+        </h2>
       </div>
       <p className="setup__lede">
-        Install a hook so Claude Code and Codex tell Central Brain when a session needs your OK —
-        and, for Claude Code, when it's waiting on your reply. It only appends entries — your
-        existing hooks are never touched, and there's a backup either way.
+        {celebrating
+          ? "Events are arriving. Central Brain will tell you the moment a session needs your OK, without you having to watch it."
+          : "Install a hook so Claude Code and Codex tell Central Brain when a session needs your OK — and, for Claude Code, when it's waiting on your reply. It only touches its own entries — your existing hooks are never changed, and there's a backup either way."}
       </p>
       {body}
       <div className="setup__footer">
-        <span className="setup__meta">Without hooks, alerts rely on slower file scanning.</span>
+        <span className="setup__meta">
+          {celebrating
+            ? "You can check this any time under ⚙ → Connected tools."
+            : "Without hooks, alerts rely on slower file scanning."}
+        </span>
         <div className="setup__actions">
           <button
             className="setup__secondary"
             onClick={() => dismissHooksSetup().then(setStatus).catch(() => {})}
             disabled={busy !== null}
           >
-            Later
+            {/* Dismissal is persisted, which is right here: once it's proven
+                working there is nothing to come back to this card for. */}
+            {celebrating ? "Done" : "Later"}
           </button>
         </div>
       </div>

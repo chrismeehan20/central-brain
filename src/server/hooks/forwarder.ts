@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveDataDir, resolveNotifyScript } from "../appPaths.js";
@@ -155,10 +156,70 @@ export function writeRuntimeEndpoint(origin: string, opts: { dataDir?: string } 
 
 /** The published endpoint, or undefined when no server has booted since install. */
 export function readRuntimeEndpoint(opts: { dataDir?: string } = {}): string | undefined {
+  return readRuntimeFile(runtimeEndpointPath(opts.dataDir ?? resolveDataDir()));
+}
+
+function readRuntimeFile(target: string): string | undefined {
   try {
-    const raw = fs.readFileSync(runtimeEndpointPath(opts.dataDir ?? resolveDataDir()), "utf8").trim();
+    const raw = fs.readFileSync(target, "utf8").trim();
     return raw === "" ? undefined : raw;
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The forwarder's protocol version, sent with every delivery and bumped when
+ * the script's contract changes.
+ *
+ * It exists so a receipt can be attributed to a script we still understand. An
+ * app upgrade rewrites the installed forwarder (see installCodexForwarder), so
+ * without this a receipt from the *previous* script would keep vouching for a
+ * pipeline that the upgrade may have changed.
+ */
+export const FORWARDER_REVISION = "3";
+
+/**
+ * Revisions whose receipts we accept as proof the pipeline works.
+ *
+ * Includes the previous revision: 2 differed only by not spooling, and its
+ * deliveries were identical on the wire, so refusing them would cost a
+ * re-verification that proves nothing.
+ */
+export const SUPPORTED_FORWARDER_REVISIONS: ReadonlySet<string> = new Set([FORWARDER_REVISION, "2"]);
+
+export function installIdPath(dataDir: string = resolveDataDir()): string {
+  return path.join(runtimeDir(dataDir), "install-id");
+}
+
+/**
+ * Identity of the current hook wiring — the thing a receipt has to match
+ * before it counts as evidence.
+ *
+ * Rotated whenever the installed hook definitions change (install, repair, or
+ * uninstall), so events collected under the *previous* wiring stop vouching
+ * for the new one. Without it, "we heard from Codex once, six days ago" reads
+ * identically to "Codex is talking to us right now", and the dashboard says
+ * Connected either way.
+ */
+export function readInstallId(opts: { dataDir?: string } = {}): string | undefined {
+  return readRuntimeFile(installIdPath(opts.dataDir ?? resolveDataDir()));
+}
+
+function writeInstallId(dataDir: string, id: string): string {
+  const target = installIdPath(dataDir);
+  fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+  writeAtomic(target, `${id}\n`, 0o600);
+  return id;
+}
+
+/** Mint a new identity, invalidating every receipt collected under the old one. */
+export function rotateInstallId(opts: { dataDir?: string } = {}): string {
+  return writeInstallId(opts.dataDir ?? resolveDataDir(), crypto.randomUUID());
+}
+
+/** The current identity, creating one on first run. */
+export function ensureInstallId(opts: { dataDir?: string } = {}): string {
+  const dataDir = opts.dataDir ?? resolveDataDir();
+  return readInstallId({ dataDir }) ?? writeInstallId(dataDir, crypto.randomUUID());
 }

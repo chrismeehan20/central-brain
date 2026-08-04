@@ -1,6 +1,6 @@
 # 0004 — Codex hook reliability queue
 
-Status: **in progress**
+Status: **complete**
 Date opened: 2026-08-03
 Driver: `/loop-queue` (one gated build-loop at a time, merged green before the next starts)
 
@@ -82,6 +82,12 @@ handled or not worth building.
   would be a feature built for a user who does not exist. Dropped as a
   non-goal, consistent with the README already scoping the product to macOS.
 
+  Amended in Loop 4: *detecting* a Codex that has hooks switched off is kept,
+  because `[features] hooks = false` is ordinary user config, not enterprise
+  policy — and without it a correctly installed, correctly approved setup would
+  be told to run `/hooks` forever, to no effect. Detection only; nothing writes
+  to `config.toml`.
+
 - **D-B — No per-server auth token on hook posts.** The review wants a random
   token in the runtime manifest, checked on delivery. Nothing else on this
   server authenticates — it binds loopback and serves the whole dashboard API
@@ -137,6 +143,15 @@ and liveness requires a recent receipt whose id matches the one on disk and
 whose revision we still support. An unqualified timestamp is no longer
 sufficient evidence for "Connected".
 
+**Accepted consequence of D4:** existing users re-verify once. Their stored
+`lastEventAt` carries no receipt, so it stops counting the moment they upgrade,
+and Codex reads as "waiting for verification" until the next event arrives —
+which for anyone actually using Codex is one prompt away, since `SessionStart`
+and `UserPromptSubmit` both fire. Meanwhile the staleness heuristic covers, and
+a spurious low-priority flag is the failure we prefer. The alternative — trust
+a receipt-less timestamp — is precisely the false "Connected" this loop exists
+to remove.
+
 ### D5 — `trusted_hash` is an approval *hint*, not the definition of working
 
 Its location inside hook groups is current-Codex behaviour, not a documented
@@ -153,17 +168,35 @@ periodically, deduplicating by delivery id and quarantining what it cannot
 parse. The forwarder always exits 0 and stays well inside Codex's 3s
 `SessionEnd` budget. This closes 0001's D1.
 
+Two deliberate departures from the review's spec, both because the alternative
+would be theatre:
+
+- **No delivery-id deduplication.** The only case that can duplicate is a
+  request the server acted on before the connection dropped, which the
+  forwarder then spools. `handleHookEvent` is already idempotent for exactly
+  those events — attention items upsert by `<session>:<kind>` and clearing
+  events filter by session — so a replay converges rather than stacks. An
+  in-process id set could not catch that case regardless, since the replay
+  usually happens in a later process.
+- **Replayed events do not refresh liveness.** A spooled event proves the
+  forwarder ran at some past moment and, by having needed spooling at all,
+  proves the live path was *not* working. Counting it as proof that the
+  pipeline works right now would rebuild the exact lie D4 removed. Replays also
+  fire no desktop notification: returning from a ten-minute outage with a dozen
+  simultaneous pings, for decisions mostly already made, is worse than silence.
+  The attention rows still appear.
+
 ## Queue
 
 | Loop | Item | Tier | Status |
 |---|---|---|---|
-| 1 | Stable forwarder location + runtime endpoint discovery (D1, D2) | ordinary | pending |
-| 2 | Desired-state reconciliation + atomic writes & timestamped backups (D3) | ordinary | pending |
-| 3 | Installation identity + receipt-qualified liveness (D4) | ordinary | pending |
-| 4 | `inspectCodexHooks()` diagnostic status model (D5, D-C) | ordinary | pending |
-| 5 | Durable event delivery: spool + drain (D6) | hard | pending |
-| 6 | HooksPanel renders the status model, repair vs install | ordinary | pending |
-| 7 | Docs reconciliation: README + stale trust comments, close this record | simple | pending |
+| 1 | Stable forwarder location + runtime endpoint discovery (D1, D2) | ordinary | **merged** (#45) |
+| 2 | Desired-state reconciliation + atomic writes & timestamped backups (D3) | ordinary | **merged** (#47) |
+| 3 | Installation identity + receipt-qualified liveness (D4) | ordinary | **merged** (#49) |
+| 4 | `inspectCodexHooks()` diagnostic status model (D5, D-C) | ordinary | **merged** (#50) |
+| 5 | Durable event delivery: spool + drain (D6) | hard | **merged** (#51) |
+| 6 | HooksPanel renders the status model, repair vs install | ordinary | **merged** (#52) |
+| 7 | Docs reconciliation: README + stale trust comments, close this record | simple | **in review** |
 
 Gate for every loop: `npm run typecheck && npm test && npm run build`, all
 exit 0, test count not below the previous loop's. Baseline at open: **250
@@ -172,3 +205,56 @@ tests**.
 Tests use isolated `mkdtemp` Codex homes and never read, write, or resolve the
 developer's real `~/.codex` — the convention `codexHooks.test.ts` already
 established.
+
+## Outcome
+
+All seven loops merged green. Test suite **250 → 352**.
+
+Against the definition of done the review proposed:
+
+| Requirement | Where |
+|---|---|
+| Install → approve via `/hooks` → Connected, no terminal | Loops 2, 4, 6 |
+| Moving or upgrading the app doesn't break the hook command | Loop 1 (stable path in the data dir) |
+| Changing the port needs no reinstall or re-approval | Loop 1 (endpoint discovered per delivery) |
+| Foreign hooks and their approval survive install/repair/uninstall | Loop 2 (only our own entries are ever touched) |
+| Never Connected after removal, trust loss, or an outdated install | Loops 2–4 (config + qualified receipt, both required) |
+| Events survive a temporary server outage | Loop 5 (spool + drain) |
+| Disabled or restricted hooks produce an honest diagnosis | Loop 4 (`disabled`) |
+| README no longer references `hooks.state` or whole-file trust | Loop 7 |
+
+Two requirements were **not** met, both deliberately, both recorded above:
+
+- **Custom `CODEX_HOME` from a Finder-launched app** (D-D). The diagnosis now
+  reports the resolved Codex home and hooks path, so the problem is legible
+  rather than silent, but there is no settings-persisted override or folder
+  picker. Worth building the first time it actually bites someone.
+- **Enterprise/MDM managed hooks** (D-A), a non-goal for a single-user macOS
+  app. The user-level half — detecting a Codex that has hooks switched off —
+  shipped in Loop 4.
+
+Three defects were caught by tests written in the same loop as the code they
+covered, which is the argument for writing them there: same-millisecond backup
+filenames collided and then sorted non-chronologically (so pruning could drop
+the newer snapshot), and the repair state's copy opened with the word
+"Connected".
+
+A fourth was found by reading the finished flow rather than by a test, and
+closed in Loop 8: the onboarding card retired at `waiting_for_verification`,
+which is the state reached the instant the user approves inside Codex. The card
+therefore disappeared on completion of the hardest step in the flow, and the
+"Connected" confirmation existed only in Settings. Loop 8 splits "setup is
+unfinished" (keeps the card up) from "the user is blocked" (holds the API-key
+card back), so the wait keeps the card without also blocking an unrelated one.
+
+### What would still be worth doing
+
+- **Claude's forwarder gets none of this.** `hooks/notify.sh` still hardcodes
+  port 4317 and is only reachable in `CENTRAL_BRAIN_HOOK_MODE=command`, which
+  is not the default. The same stable-path and endpoint-discovery treatment
+  would apply almost unchanged.
+- **Nothing prunes the spool's quarantine directory.** It only grows on a bug,
+  so it should stay empty, but "should stay empty" is how directories fill up.
+- **A real-Codex release check remains manual.** The forwarder is tested against
+  an ephemeral server; nothing in CI runs actual Codex, and the approval flow in
+  particular can only be verified by hand.

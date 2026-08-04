@@ -16,6 +16,13 @@ const MAX_SNOOZE_MINUTES = 24 * 60;
  * Codex sends the same `hook_event_name` / `session_id` / `cwd` fields Claude
  * does, so the payload is genuinely ambiguous.
  */
+/** A header value, normalised: repeated headers and empty strings both read as absent. */
+function header(value: string | string[] | undefined): string | undefined {
+  const first = Array.isArray(value) ? value[0] : value;
+  const trimmed = first?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 function hookHandler(tool: SourceTool) {
   return async (req: FastifyRequest<{ Body: HookEventPayload }>, reply: FastifyReply) => {
     const payload = req.body;
@@ -23,7 +30,20 @@ function hookHandler(tool: SourceTool) {
       reply.code(400);
       return { error: "invalid hook payload" };
     }
-    await handleHookEvent(payload, tool);
+    // Stamped by the Codex forwarder; Claude's http hook posts without them,
+    // and its liveness is not qualified on them. Recording metadata only —
+    // never the prompt or tool_input.
+    await handleHookEvent(payload, tool, {
+      receipt: {
+        eventName: payload.hook_event_name,
+        ...(header(req.headers["x-central-brain-install-id"]) !== undefined
+          ? { installId: header(req.headers["x-central-brain-install-id"])! }
+          : {}),
+        ...(header(req.headers["x-central-brain-forwarder-revision"]) !== undefined
+          ? { forwarderRevision: header(req.headers["x-central-brain-forwarder-revision"])! }
+          : {}),
+      },
+    });
     return { ok: true };
   };
 }
