@@ -37,6 +37,10 @@
   /* Red's neighbour, for a failure one step removed (a PR rather than the
      branch you're standing on). */
   --danger-pr: #fb923c;
+  /* Fleet status colours: an agent moving right now, and one blocked on you.
+     Amber sits between them for "blocked but low-stakes" if ever needed. */
+  --ok: #4ade80;
+  --warn: #fbbf24;
   /* Three radii, by role rather than one value everywhere: panels, project
      cards, and small controls should not all share a corner. */
   --radius: 10px;
@@ -1659,4 +1663,849 @@ button.activity__text--open:hover {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ============================================================ OS shell ==== */
+/* The agentic-OS chrome: a persistent sidebar beside every view. The shell
+   (.shell) keeps its centered max-width INSIDE the main pane, so the Overview
+   grid and the detail page render exactly as before, just offset by the rail. */
+
+.os {
+  display: flex;
+  min-height: 100vh;
+}
+
+.os__main {
+  flex: 1;
+  min-width: 0; /* long paths inside must truncate, not widen the pane */
+}
+
+.shell--wide {
+  max-width: 1520px;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  width: 226px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 1.1rem 0.8rem;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+  border-right: 1px solid var(--border);
+}
+
+.sidebar--collapsed {
+  width: 64px;
+  padding: 1.1rem 0.6rem;
+}
+
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.55rem 1.1rem;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.sidebar__mark {
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--accent);
+  text-shadow: 0 0 14px rgba(125, 211, 252, 0.55);
+}
+
+.sidebar__name {
+  display: flex;
+  flex-direction: column;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.sidebar__tagline {
+  font-weight: 400;
+  font-size: 0.68rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.sidebar__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.55rem;
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.875rem;
+  border: 1px solid transparent;
+}
+
+.sidebar__item:hover {
+  color: var(--ink);
+  background: var(--surface-raised);
+}
+
+.sidebar__item--active {
+  color: var(--ink);
+  background: var(--surface-raised);
+  border-color: var(--border);
+}
+
+/* A thin lit edge instead of a filled pill: the active view should read at a
+   glance without outshining the live badges next to it. */
+.sidebar__item--active::before {
+  content: "";
+  position: absolute;
+  left: -0.8rem;
+  top: 20%;
+  bottom: 20%;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.sidebar--collapsed .sidebar__item {
+  justify-content: center;
+  padding: 0.55rem 0;
+}
+
+.sidebar--collapsed .sidebar__item--active::before {
+  left: -0.6rem;
+}
+
+.sidebar__label {
+  white-space: nowrap;
+}
+
+.sidebar__badge {
+  margin-left: auto;
+  min-width: 1.2rem;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.05rem 0.3rem;
+  border-radius: 999px;
+}
+
+.sidebar__badge + .sidebar__badge {
+  margin-left: 0.25rem;
+}
+
+.sidebar__badge--waiting {
+  background: rgba(248, 113, 113, 0.16);
+  color: var(--danger);
+}
+
+.sidebar__badge--active {
+  background: rgba(74, 222, 128, 0.14);
+  color: var(--ok);
+}
+
+/* Collapsed, the badges ride the icon's corner so the count survives. */
+.sidebar--collapsed .sidebar__badge {
+  position: absolute;
+  top: 0.1rem;
+  right: 0.15rem;
+  margin: 0;
+}
+
+.sidebar--collapsed .sidebar__badge--active {
+  top: auto;
+  bottom: 0.1rem;
+}
+
+.sidebar__collapse {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.55rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.sidebar__collapse:hover {
+  color: var(--ink);
+  background: var(--surface-raised);
+}
+
+.sidebar--collapsed .sidebar__collapse {
+  justify-content: center;
+}
+
+/* Phone-width: the rail drops to icons regardless of the stored preference —
+   a 226px rail on a 390px screen would leave no room for the content. */
+@media (max-width: 760px) {
+  .sidebar {
+    width: 60px;
+    padding: 1rem 0.5rem;
+  }
+  .sidebar .sidebar__label,
+  .sidebar .sidebar__name {
+    display: none;
+  }
+  .sidebar .sidebar__item {
+    justify-content: center;
+    padding: 0.55rem 0;
+  }
+  .sidebar .sidebar__badge {
+    position: absolute;
+    top: 0.1rem;
+    right: 0.15rem;
+    margin: 0;
+  }
+  .sidebar .sidebar__badge--active {
+    top: auto;
+    bottom: 0.1rem;
+  }
+  .sidebar .sidebar__collapse {
+    display: none;
+  }
+}
+
+/* ========================================================= fleet status === */
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot--active {
+  background: var(--ok);
+  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.5);
+  animation: status-pulse 2.4s ease-out infinite;
+}
+
+.status-dot--waiting {
+  background: var(--danger);
+  box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.5);
+  animation: status-pulse 1.6s ease-out infinite;
+}
+
+.status-dot--idle {
+  background: var(--muted);
+  opacity: 0.55;
+}
+
+@keyframes status-pulse {
+  0% {
+    box-shadow: 0 0 0 0 currentColor;
+    opacity: 1;
+  }
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+    opacity: 0.85;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot--active,
+  .status-dot--waiting {
+    animation: none;
+  }
+}
+
+/* ======================================================= mission control == */
+
+.board__head,
+.agents__head,
+.activity-page__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+/* .chips carries a negative top margin tuned for the Overview topbar; inside
+   these page headers it sits inline, so neutralize it. */
+.activity-page__head .chips {
+  margin: 0;
+}
+
+.board__fleet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.fleet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 0.8rem;
+}
+
+.fleet-chip:hover {
+  border-color: var(--accent);
+}
+
+.fleet-chip--waiting {
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.fleet-chip__project {
+  font-weight: 500;
+}
+
+.fleet-chip__tool {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.fleet-chip__tool--claude {
+  color: var(--claude);
+}
+
+.fleet-chip__tool--codex {
+  color: var(--codex);
+}
+
+.fleet-chip__branch {
+  color: var(--muted);
+  font-size: 0.72rem;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board__columns {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .board__columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .board__columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.board-col {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card-lg);
+  padding: 0.8rem;
+  min-height: 12rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.board-col--drop {
+  border-color: var(--accent);
+}
+
+.board-col__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0.2rem 0.75rem;
+}
+
+.board-col__head h2 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.board-col__count {
+  font-size: 0.72rem;
+  color: var(--muted);
+  background: var(--surface-raised);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+}
+
+.board-col__add {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  padding: 0.2rem;
+}
+
+.board-col__add:hover {
+  color: var(--ink);
+  border-color: var(--border);
+}
+
+.board-col__cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  flex: 1;
+}
+
+.board-col__empty {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin: 0.25rem 0.2rem;
+}
+
+.board-compose {
+  margin-bottom: 0.55rem;
+}
+
+.board-compose__input {
+  width: 100%;
+  background: var(--surface-raised);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.55rem 0.7rem;
+}
+
+.board-compose__input:focus {
+  outline: none;
+}
+
+.board-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  transition: border-color 120ms ease, opacity 120ms ease;
+}
+
+.board-card:hover {
+  border-color: var(--accent);
+}
+
+.board-card--dragging {
+  opacity: 0.35;
+}
+
+/* The insertion line rides the card the drop would land above. */
+.board-card--dropbefore {
+  box-shadow: 0 -0.4rem 0 -0.13rem var(--accent);
+}
+
+.board-card__dropline {
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.board-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--ink);
+  padding: 0.65rem 0.75rem;
+  font-family: inherit;
+  cursor: grab;
+}
+
+.board-card__title {
+  font-size: 0.87rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.board-card__note {
+  font-size: 0.76rem;
+  color: var(--muted);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-line;
+}
+
+.board-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.board-card__project {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-card__status {
+  color: var(--muted);
+}
+
+.board-card__age {
+  flex-shrink: 0;
+}
+
+.board-card__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.board-card__input,
+.board-card__textarea,
+.board-card__select {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.82rem;
+  padding: 0.4rem 0.55rem;
+}
+
+.board-card__input:focus,
+.board-card__textarea:focus,
+.board-card__select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.board-card__textarea {
+  resize: vertical;
+}
+
+.board-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.board-card__actions button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  font-size: 0.75rem;
+  padding: 0.3rem 0.6rem;
+}
+
+.board-card__actions button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.board-card__save {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+
+.board-card__delete {
+  margin-left: auto;
+  display: inline-flex;
+  color: var(--muted) !important;
+}
+
+.board-card__delete:hover {
+  color: var(--danger) !important;
+  border-color: var(--danger) !important;
+}
+
+/* ============================================================== agents ==== */
+
+.agents__group {
+  margin-bottom: 2rem;
+}
+
+.agents__group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  margin: 0 0 0.6rem;
+}
+
+.agents__count {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+
+.agents__blurb {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+  margin-left: 0.25rem;
+}
+
+.agents__empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.agents__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 0.55rem 0.85rem;
+  font-size: 0.83rem;
+}
+
+.agent-row--waiting {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.05);
+}
+
+.agent-row__tool {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+
+.agent-row__tool--claude {
+  color: var(--claude);
+}
+
+.agent-row__tool--codex {
+  color: var(--codex);
+}
+
+.agent-row__project {
+  background: none;
+  border: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.83rem;
+  font-weight: 500;
+  padding: 0;
+  flex-shrink: 0;
+  max-width: 13rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-row__project:hover {
+  color: var(--accent);
+}
+
+.agent-row__desc {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-row--waiting .agent-row__desc {
+  color: var(--danger);
+}
+
+.agent-row__facts {
+  display: flex;
+  gap: 0.6rem;
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.agent-row__age {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  min-width: 3.6rem;
+  text-align: right;
+}
+
+.agent-row__open {
+  flex-shrink: 0;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  font-size: 0.75rem;
+  padding: 0.3rem 0.7rem;
+}
+
+.agent-row__open:hover {
+  border-color: var(--accent);
+}
+
+.agents__more {
+  margin-top: 0.6rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  font-size: 0.78rem;
+  padding: 0.35rem 0.8rem;
+}
+
+.agents__more:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+/* On narrow screens the middle facts go; the row keeps status, names, age. */
+@media (max-width: 860px) {
+  .agent-row__facts {
+    display: none;
+  }
+  .agent-row__desc {
+    display: none;
+  }
+}
+
+/* ============================================================ activity ==== */
+
+.activity-page__empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+  max-width: 34rem;
+}
+
+.feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.feed__row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  padding: 0.5rem 0.25rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.84rem;
+}
+
+.feed__row:last-child {
+  border-bottom: none;
+}
+
+/* The tool marker is a slim colored tick rather than a word: at feed density
+   a column of "Claude Claude Codex" reads as noise, a color column doesn't. */
+.feed__tool {
+  align-self: stretch;
+  width: 3px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.feed__tool--claude {
+  background: var(--claude);
+}
+
+.feed__tool--codex {
+  background: var(--codex);
+}
+
+.feed__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.feed__project {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.84rem;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.feed__project:hover {
+  color: var(--accent);
+}
+
+.feed__project--unknown {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.feed__message {
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed__row--PermissionRequest .feed__message {
+  color: var(--danger);
+}
+
+.feed__row--Notification .feed__message {
+  color: var(--warn);
+}
+
+.feed__age {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
 }

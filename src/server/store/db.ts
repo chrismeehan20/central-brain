@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { JSONFilePreset } from "lowdb/node";
 import { resolveDataDir } from "../appPaths.js";
-import type { Override, AttentionItem, GithubStatus, ProjectSummary, ProjectDetail, DailyDigest, HookReceipt, SourceTool, Preferences } from "@shared/types.js";
+import type { Override, AttentionItem, GithubStatus, ProjectSummary, ProjectDetail, DailyDigest, HookReceipt, SourceTool, Preferences, BoardCard, ActivityEvent } from "@shared/types.js";
 import { DEFAULT_PREFERENCES, EDITORS } from "@shared/types.js";
 
 /** Exported so startup can log it — inside an app bundle this is the only clue to where the data went. */
@@ -37,6 +37,26 @@ export interface DigestData {
 }
 export const digestDb = await JSONFilePreset<DigestData>(path.join(dataDir, "digest.json"), {
   digest: null,
+});
+
+/** The mission-control board. Flat card list; per-column order is array order — see BoardCard. */
+export interface BoardData {
+  cards: BoardCard[];
+}
+export const boardDb = await JSONFilePreset<BoardData>(path.join(dataDir, "board.json"), {
+  cards: [],
+});
+
+/**
+ * Rolling window of hook events for the activity stream, oldest first. Capped
+ * in alert/activity.ts rather than here so the cap lives beside the code that
+ * appends — a second writer that forgot the cap would grow this file forever.
+ */
+export interface ActivityData {
+  events: ActivityEvent[];
+}
+export const activityDb = await JSONFilePreset<ActivityData>(path.join(dataDir, "activity.json"), {
+  events: [],
 });
 
 /**

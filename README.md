@@ -33,6 +33,22 @@ dashboard, but that path is neither packaged nor supported.)
   that happens a rollout file that stops growing mid-session is flagged as
   "maybe waiting," clearly labeled as a heuristic. Once real Codex hook
   events start arriving, the heuristic stands down and clears its guesses.
+- **Mission Control board.** A cross-project kanban (`#/board` in the
+  sidebar): four fixed lanes — Inbox, Up next, In progress, Done — with
+  drag-and-drop cards you own. Link a card to a project and it shows that
+  project's live agent state (agent active / waiting on you), derived at
+  render time from sessions and alerts, so a card never goes stale when an
+  agent finishes without telling anyone. A fleet strip on top shows every
+  non-idle agent; clicking a chip jumps to the exact chat that's moving (or
+  stuck).
+- **Agents roster.** Every Claude and Codex session across your projects
+  (`#/agents`), waiting-on-you first, then active (moved in the last 10
+  minutes), then the rest of the last 48 hours — with branch, model, and
+  token counts where Codex reports them, and one-click open/resume.
+- **Activity stream.** The live hook-event feed (`#/activity`): what the
+  fleet has been doing, newest first, pushed over the same SSE stream the
+  alerts ride and kept as a rolling window. Metadata only — event names and
+  tool names, never prompts or tool inputs.
 - **GitHub status.** Branch, dirty state, ahead/behind, open PRs, and CI
   status per project, via your existing `gh` CLI auth. No new tokens.
 - **AI "what's left" summaries.** An optional one-line summary per project

@@ -16,27 +16,23 @@ const SNOOZE_MINUTES = 60;
 /** How often the panel re-evaluates snooze expiry, so a lapsed snooze reappears without an SSE frame. */
 const TICK_MS = 30_000;
 
-export default function AttentionPanel({ projects }: { projects: Project[] }) {
-  const [items, setItems] = useState<AttentionItem[]>([]);
+interface Props {
+  projects: Project[];
+  /**
+   * The attention list and its setter, owned by App (see useAttentionStream):
+   * the panel stopped holding its own EventSource when the sidebar badges and
+   * the board started needing the same list. Mutations still land here — the
+   * setter pushes the server's returned list up so every consumer converges.
+   */
+  items: AttentionItem[];
+  onItemsChange: (items: AttentionItem[]) => void;
+}
+
+export default function AttentionPanel({ projects, items, onItemsChange }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const editorName = useEditorName();
-
-  useEffect(() => {
-    const source = new EventSource("/api/stream");
-    source.addEventListener("attention", (e) => {
-      try {
-        setItems(JSON.parse((e as MessageEvent).data));
-      } catch {
-        // ignore malformed frame
-      }
-    });
-    source.onerror = () => {
-      // EventSource auto-reconnects; nothing to do here.
-    };
-    return () => source.close();
-  }, []);
 
   // Snoozes expire on the clock, not on an event, so the panel needs its own
   // heartbeat — otherwise a row whose snooze lapsed would stay hidden until the
@@ -83,7 +79,7 @@ export default function AttentionPanel({ projects }: { projects: Project[] }) {
     try {
       const res = await run();
       // The SSE frame carries the same list a moment later; both paths converge.
-      setItems(res.items);
+      onItemsChange(res.items);
     } catch (err) {
       setError(String((err as Error).message ?? err));
     } finally {
