@@ -123,6 +123,7 @@ test("performDispatch (simulated mac) cuts the worktree, launches Terminal, stam
       platform: "darwin",
       now: Date.parse("2026-08-21T12:00:00Z"),
       writePrompt: () => "/data/dispatch/d1.md",
+      mkdir: () => {},
       run: async (file, args) => {
         calls.push([file, args]);
       },
@@ -148,7 +149,7 @@ test("performDispatch worktree failure surfaces before any card stamp", async ()
     performDispatch(
       "d2",
       { cwd: "/w", worktree: { repoDir: "/r", path: "/w", branch: "agent/x" }, prompt: "p" },
-      { platform: "darwin", writePrompt: () => "/p.md", run: async () => { throw new Error("boom"); } },
+      { platform: "darwin", writePrompt: () => "/p.md", mkdir: () => {}, run: async () => { throw new Error("boom"); } },
     ),
     /git worktree add failed: boom/,
   );

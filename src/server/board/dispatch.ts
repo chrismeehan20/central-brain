@@ -146,6 +146,8 @@ end tell`;
 export interface PerformDeps {
   run?: (file: string, args: string[]) => Promise<unknown>;
   writePrompt?: (id: string, prompt: string) => string;
+  /** Filesystem seam: everything performDispatch touches must be stubbable, or tests hit the real disk (a CI runner once EACCESed on exactly that). */
+  mkdir?: (dir: string) => void;
   now?: number;
   platform?: NodeJS.Platform;
 }
@@ -175,10 +177,11 @@ export async function performDispatch(
   }
   const run = deps.run ?? ((file: string, args: string[]) => execFileAsync(file, args));
   const writePrompt = deps.writePrompt ?? defaultWritePrompt;
+  const mkdir = deps.mkdir ?? ((dir: string) => fs.mkdirSync(dir, { recursive: true }));
   const now = deps.now ?? Date.now();
 
   if (plan.worktree) {
-    fs.mkdirSync(path.dirname(plan.worktree.path), { recursive: true });
+    mkdir(path.dirname(plan.worktree.path));
     try {
       await run("git", ["-C", plan.worktree.repoDir, "worktree", "add", plan.worktree.path, "-b", plan.worktree.branch]);
     } catch (err) {
