@@ -1,0 +1,10 @@
+{
+  "name": "Central Brain",
+  "short_name": "Central Brain",
+  "description": "Mission control for every project you're building.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#eef0f4",
+  "theme_color": "#eef0f4",
+  "icons": [{ "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }]
+}

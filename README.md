@@ -165,6 +165,39 @@ back, so a restart or an upgrade doesn't silently eat them.
 
 To remove them: `npm run uninstall-codex-hooks`.
 
+### From your phone
+
+The dashboard works from a phone — see which agents need you from the
+couch, move board cards, snooze alerts — but **do it through Tailscale, not
+by exposing the port.** The server binds `127.0.0.1` only and its API is
+deliberately unauthenticated (it trusts the machine boundary — `/api/open`
+launches apps on your Mac), so a port-forward or public tunnel would hand
+anyone on the internet a remote control for your computer. Tailscale keeps
+the machine boundary and stretches it to your own devices: only hardware
+signed into your tailnet can reach the server at all, and traffic is
+end-to-end encrypted WireGuard.
+
+1. Install [Tailscale](https://tailscale.com/download) on the Mac and the
+   phone, signed into the same tailnet (the free plan covers this).
+2. On the Mac:
+
+   ```bash
+   tailscale serve --bg 4317
+   ```
+
+   Tailscale proxies `https://<your-mac>.<tailnet>.ts.net` to
+   `localhost:4317` with a real HTTPS certificate. No config changes here;
+   the server keeps listening on loopback only, exactly as before.
+3. Open that URL on the phone and **Add to Home Screen** — the dashboard
+   installs as a standalone full-screen app with its own icon (there's a
+   web manifest for exactly this). Live alerts stream in over the same SSE
+   connection the desktop uses.
+
+`tailscale serve status` shows what's exposed; `tailscale serve reset`
+turns it off. If you ever see a "funnel" flag in examples, don't use it
+here — Funnel publishes to the open internet, which is precisely what this
+API must never be.
+
 ### How the app runs the server
 
 The menubar app owns the server's lifetime. On launch it probes port 4317: if

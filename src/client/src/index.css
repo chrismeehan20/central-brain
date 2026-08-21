@@ -1622,6 +1622,19 @@ button.activity__text--open:hover {
   font-size: 0.8rem;
 }
 
+/* Phone width: the row stacks — tool name up top, status copy at full
+   measure, the action below it — instead of wrapping the copy into a
+   one-word column beside a floating button. */
+@media (max-width: 560px) {
+  .hooks__row {
+    flex-wrap: wrap;
+  }
+  .hooks__row > :first-child {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+}
+
 .hooks__tool {
   flex-shrink: 0;
   min-width: 6.5rem;
@@ -2099,6 +2112,10 @@ button.activity__text--open:hover {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  /* A chip can never outgrow the viewport: the branch yields first, then the
+     project name — a phone must not scroll sideways for one long ref. */
+  max-width: 100%;
+  min-width: 0;
   padding: 0.4rem 0.8rem;
   background: var(--surface);
   border: 1px solid var(--border-soft);
@@ -2121,6 +2138,10 @@ button.activity__text--open:hover {
 
 .fleet-chip__project {
   font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fleet-chip__tool {
@@ -2141,6 +2162,8 @@ button.activity__text--open:hover {
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 0.7rem;
+  flex-shrink: 1;
+  min-width: 2rem;
   max-width: 14rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2597,13 +2620,21 @@ button.activity__text--open:hover {
   background: var(--hover);
 }
 
-/* On narrow screens the middle facts go; the row keeps status, names, age. */
+/* On narrow screens the middle facts go; the row keeps status, names, age,
+   and the Open button — the project name is what yields, not the controls. */
 @media (max-width: 860px) {
   .agent-row__facts {
     display: none;
   }
   .agent-row__desc {
     display: none;
+  }
+  .agent-row__project {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+  .agent-row__age {
+    min-width: 0;
   }
 }
 
