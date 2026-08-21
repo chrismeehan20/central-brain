@@ -61,6 +61,14 @@ dashboard, but that path is neither packaged nor supported.)
   fleet has been doing, newest first, pushed over the same SSE stream the
   alerts ride and kept as a rolling window. Metadata only — event names and
   tool names, never prompts or tool inputs.
+- **Skill mining.** Once a week (needs the Anthropic key), Central Brain
+  reads the opening prompts and summaries of your last month of sessions —
+  metadata it already holds, no transcripts opened — and asks: what do you
+  keep doing by hand that deserves to be a reusable skill? Each finding
+  lands as a "Skill idea:" card in the board's inbox with the evidence and
+  a suggested outline; you decide what becomes real. Deduped, hash-gated
+  so a quiet week costs nothing, and runnable on demand via
+  `POST /api/skill-miner/run`.
 - **GitHub status.** Branch, dirty state, ahead/behind, open PRs, and CI
   status per project, via your existing `gh` CLI auth. No new tokens.
 - **AI "what's left" summaries.** An optional one-line summary per project
@@ -226,6 +234,13 @@ work from the phone over Tailscale, no OS beta required):
   anywhere. (The same trick works from an Apple Reminders automation if you
   prefer capturing there: a personal automation can forward new reminders
   from a chosen list into the board.)
+- **"Ask my brain"**: *Ask for Input* → POST to `/api/ask` with body
+  `{"question": <Provided Input>}` → *Speak Text*. Free-form questions
+  answered from the dashboard's own state — fleet, board, project
+  summaries, CI, recent events — via one budgeted AI call (needs the
+  Anthropic key). Deliberately closed-book: it answers from what Central
+  Brain already knows or says it doesn't have it, so replies are fast and
+  never invented.
 
 `/api/brief?format=json` returns the same text plus raw counts, for
 Shortcuts that should stay silent when nothing needs you.

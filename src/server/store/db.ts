@@ -50,6 +50,16 @@ export const usageDb = await JSONFilePreset<UsageData>(path.join(dataDir, "usage
   instants: [],
 });
 
+/** The skill miner's run gate: when it last ran and over what evidence — see ai/skillMiner.ts. */
+export interface SkillMinerData {
+  generatedAt: string; // ISO; "" = never ran
+  hash: string; // sha256 of the evidence the last run saw
+}
+export const skillMinerDb = await JSONFilePreset<SkillMinerData>(path.join(dataDir, "skill-miner.json"), {
+  generatedAt: "",
+  hash: "",
+});
+
 /** The mission-control board. Flat card list; per-column order is array order — see BoardCard. */
 export interface BoardData {
   cards: BoardCard[];
