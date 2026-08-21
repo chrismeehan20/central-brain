@@ -14,6 +14,7 @@ import type {
   Preferences,
   SettingsResponse,
   MissingProjectTriage,
+  UsageWindow,
 } from "@shared/types";
 
 export async function fetchProjects(): Promise<{ projects: Project[]; lastScanAt: string | null }> {
@@ -170,6 +171,13 @@ export function deleteBoardCard(id: string): Promise<{ cards: BoardCard[] }> {
   return boardMutation("/api/board/delete", "POST", { id });
 }
 
+/** The estimated Claude usage window; see UsageWindow for what "estimated" claims. */
+export async function fetchUsage(): Promise<{ claude: UsageWindow }> {
+  const res = await fetch("/api/usage");
+  if (!res.ok) throw new Error(`Failed to load usage: ${res.status}`);
+  return res.json();
+}
+
 /** The rolling hook-event window, oldest first; live appends arrive over SSE. */
 export async function fetchActivity(): Promise<{ events: ActivityEvent[] }> {
   const res = await fetch("/api/activity");
@@ -316,6 +324,18 @@ export async function updatePreferences(patch: Partial<Preferences>): Promise<Pr
     throw new Error(err.error ?? `Failed to save preferences: ${res.status}`);
   }
   return (await res.json()).preferences;
+}
+
+/** Empty string turns phone push off. Returns the stored state for the settings field. */
+export async function saveNtfyUrl(url: string): Promise<{ configured: boolean; url: string | null }> {
+  const res = await fetch("/api/settings/ntfy", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Failed to save: ${res.status}`);
+  return body.ntfy;
 }
 
 export function saveApiKey(apiKey: string): Promise<ApiKeyStatus> {

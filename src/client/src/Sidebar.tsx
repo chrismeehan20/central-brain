@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import type { UsageWindow } from "@shared/types";
 import type { FleetCounts } from "./agents";
+import { formatDuration } from "./format";
 import { BotIcon, BrandMark, GridIcon, KanbanIcon, PanelIcon, PulseIcon } from "./Icons";
 
 export type OsView = "overview" | "board" | "agents" | "activity";
@@ -18,6 +20,8 @@ interface Props {
   /** The active view; "project" (the detail page) highlights Overview, which is where its back button lands. */
   view: OsView | "project";
   counts: FleetCounts;
+  /** The estimated Claude usage window; absent until the first fetch lands. */
+  usage?: UsageWindow;
 }
 
 interface NavItem {
@@ -33,7 +37,7 @@ const NAV: NavItem[] = [
   { view: "activity", label: "Activity", icon: PulseIcon },
 ];
 
-export default function Sidebar({ view, counts }: Props) {
+export default function Sidebar({ view, counts, usage }: Props) {
   // Collapse survives reloads but is per-browser, not a server preference:
   // it's about this window's width, not about how you use the product.
   const [collapsed, setCollapsed] = useState(() => {
@@ -101,6 +105,40 @@ export default function Sidebar({ view, counts }: Props) {
           );
         })}
       </div>
+
+      {/* The Claude usage-window meter: the fact that decides whether the
+          next batch of agent work can start now or should queue. Boundaries
+          only, honestly labeled an estimate (see UsageWindow) — rendered only
+          once at least one window has actually been observed, and hidden in
+          the collapsed rail, where a bar with no words would just be a
+          mystery stripe. */}
+      {usage?.windowStart && !collapsed && (
+        <div
+          className="sidebar__usage"
+          title={`Estimated from observed session activity — Anthropic exposes no API for this. Window ${new Date(
+            usage.windowStart,
+          ).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}–${new Date(
+            usage.windowEnd!,
+          ).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`}
+        >
+          <div className="sidebar__usage-label">
+            <span>Claude window</span>
+            <span className="sidebar__usage-value">
+              {usage.active && usage.remainingMs !== undefined
+                ? `~${formatDuration(usage.remainingMs)} left`
+                : "resets on next prompt"}
+            </span>
+          </div>
+          {usage.active && usage.remainingMs !== undefined && (
+            <div className="sidebar__usage-bar" aria-hidden>
+              <div
+                className="sidebar__usage-fill"
+                style={{ width: `${Math.min(100, Math.max(2, (usage.remainingMs / (5 * 60 * 60 * 1000)) * 100))}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       <button
         className="sidebar__collapse"

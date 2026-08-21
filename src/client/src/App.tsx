@@ -11,10 +11,12 @@ import {
   fetchProjects,
   fetchRelocations,
   fetchSettings,
+  fetchUsage,
   relocateProject,
   triggerScan,
   updateOverride,
 } from "./api";
+import type { UsageWindow } from "@shared/types";
 import { PreferencesContext } from "./prefs";
 import {
   ACTIVE_WINDOW_DAYS,
@@ -76,6 +78,19 @@ export default function App() {
   // The one SSE subscription to the attention list, shared by the panel, the
   // sidebar badges, the board's live chips, and the agents roster.
   const { attention, setAttention } = useAttentionStream();
+  const [usage, setUsage] = useState<UsageWindow | undefined>(undefined);
+
+  // The usage estimate only moves when activity is observed or a minute
+  // passes, so a quiet 60s poll matches its real resolution.
+  useEffect(() => {
+    const load = () =>
+      fetchUsage()
+        .then((res) => setUsage(res.claude))
+        .catch(() => {});
+    load();
+    const interval = setInterval(load, 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const onHashChange = () => setRoute(parseRoute());
@@ -202,7 +217,7 @@ export default function App() {
     return (
       <PreferencesContext.Provider value={preferences}>
         <div className="os">
-          <Sidebar view={route.kind} counts={counts} />
+          <Sidebar view={route.kind} counts={counts} usage={usage} />
           <div className="os__main">{content}</div>
         </div>
       </PreferencesContext.Provider>

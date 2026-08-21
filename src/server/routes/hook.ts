@@ -8,6 +8,7 @@ import {
 } from "../alert/attention.js";
 import { getHookLiveness } from "../alert/hookLiveness.js";
 import { getActivityEvents, recordActivity } from "../alert/activity.js";
+import { getUsageWindow, recordUsageInstants } from "../usage/usage.js";
 
 const DEFAULT_SNOOZE_MINUTES = 60;
 const MAX_SNOOZE_MINUTES = 24 * 60;
@@ -49,6 +50,9 @@ function hookHandler(tool: SourceTool) {
     // deliberately excluded, since a burst of hours-old events would render as
     // "happening now" in a feed that has no other time axis than arrival.
     await recordActivity(payload, tool);
+    // Claude events are also usage-window observations (Codex has its own,
+    // separate limits, so its events deliberately don't count here).
+    if (tool === "claude") await recordUsageInstants([Date.now()]);
     return { ok: true };
   };
 }
@@ -68,6 +72,10 @@ export async function hookRoutes(app: FastifyInstance) {
   // The rolling hook-event window behind the Activity view. Oldest first, as
   // stored; live appends ride the same SSE stream as attention updates.
   app.get("/api/activity", async () => ({ events: getActivityEvents() }));
+
+  // The estimated Claude usage window — see usage/usage.ts for what
+  // "estimated" means and why boundaries are all it claims.
+  app.get("/api/usage", async () => ({ claude: getUsageWindow() }));
 
   // Both take the id in the body, not the path: attention ids are
   // `<sessionId>:<kind>`, and a colon in a URL segment is a needless

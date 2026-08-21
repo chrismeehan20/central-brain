@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { apiKeyStatus, clearApiKey, dismissSetup, saveApiKey } from "../ai/apiKey.js";
 import { AI_MODEL, callsRemaining, dailyCap } from "../ai/budget.js";
-import { getPreferences, updatePreferences } from "../store/db.js";
+import { getPreferences, settingsDb, updatePreferences, writeSettings } from "../store/db.js";
 import { EDITORS } from "@shared/types.js";
 
 interface ApiKeyBody {
@@ -22,12 +22,46 @@ interface PreferencesBody {
  * `ApiKeyStatus` with a last-4 hint instead. Localhost-only binding is not a
  * reason to hand a live credential to a webview that also renders project text.
  */
+function ntfyStatus() {
+  const url = settingsDb.data.ntfyUrl ?? "";
+  return { configured: Boolean(url), url: url || null };
+}
+
 export async function settingsRoutes(app: FastifyInstance) {
   app.get("/api/settings", async () => ({
     apiKey: apiKeyStatus(),
     ai: { model: AI_MODEL, dailyCap: dailyCap(), callsRemaining: callsRemaining() },
     preferences: getPreferences(),
+    ntfy: ntfyStatus(),
   }));
+
+  // Phone push. An empty string clears it. Only the URL's shape is validated —
+  // ntfy topics need no registration, so there is nothing to verify against.
+  app.put<{ Body: { url?: unknown } }>("/api/settings/ntfy", async (req, reply) => {
+    const url = req.body?.url;
+    if (typeof url !== "string") {
+      reply.code(400);
+      return { error: "url must be a string (empty to turn phone push off)" };
+    }
+    const trimmed = url.trim();
+    if (trimmed) {
+      let parsed: URL;
+      try {
+        parsed = new URL(trimmed);
+      } catch {
+        reply.code(400);
+        return { error: "That doesn't parse as a URL — expected e.g. https://ntfy.sh/your-topic" };
+      }
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        reply.code(400);
+        return { error: "The ntfy URL must be http(s)" };
+      }
+    }
+    if (trimmed) settingsDb.data.ntfyUrl = trimmed;
+    else delete settingsDb.data.ntfyUrl;
+    await writeSettings();
+    return { ntfy: ntfyStatus() };
+  });
 
   app.put<{ Body: PreferencesBody }>("/api/settings/preferences", async (req, reply) => {
     const { notifications, editor } = req.body ?? {};

@@ -198,6 +198,36 @@ turns it off. If you ever see a "funnel" flag in examples, don't use it
 here — Funnel publishes to the open internet, which is precisely what this
 API must never be.
 
+#### Ask Siri
+
+`GET /api/brief` returns the fleet state as plain spoken English — blocked
+agents first, with reasons, then who's working, the estimated Claude-window
+reset, and what's up next on the board. Two Shortcuts make it yours (both
+work from the phone over Tailscale, no OS beta required):
+
+- **"Code status"**: Shortcuts → new shortcut → *Get Contents of URL*
+  (`https://<your-mac>.<tailnet>.ts.net/api/brief`) → *Speak Text*. Name it
+  "Code status" and "Hey Siri, code status" reads your fleet aloud.
+- **"Add to my build list"**: *Ask for Input* (text) → *Get Contents of URL*
+  with method POST to `/api/board/card`, request body JSON
+  `{"title": <Provided Input>}` — dictate a card into the Inbox from
+  anywhere. (The same trick works from an Apple Reminders automation if you
+  prefer capturing there: a personal automation can forward new reminders
+  from a chosen list into the board.)
+
+`/api/brief?format=json` returns the same text plus raw counts, for
+Shortcuts that should stay silent when nothing needs you.
+
+#### Push alerts to the phone
+
+The ⚙ settings panel has a **Phone push (ntfy)** field: paste an
+[ntfy](https://ntfy.sh) topic URL (or a self-hosted instance) and every
+needs-attention alert also lands on your phone through the ntfy app, with
+the same content rule as everywhere else — project and event kind, never
+prompt text. Anyone who knows a public topic's name can subscribe to it, so
+use a long random topic (or self-host); the desktop mute switch silences
+phone push too.
+
 ### Let your agents use the brain (MCP)
 
 Central Brain ships an MCP server, so any Claude Code session on the machine

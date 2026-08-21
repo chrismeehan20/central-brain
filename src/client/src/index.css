@@ -1829,6 +1829,22 @@ button.activity__text--open:hover {
   }
 }
 
+/* The ntfy row stacks its label over the field — a URL needs the width. */
+.setup__pref--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.setup__pref-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.setup__pref-row .setup__input {
+  flex: 1;
+}
+
 /* ============================================================ OS shell ==== */
 /* The agentic-OS chrome: a persistent sidebar beside every view. The shell
    (.shell) keeps its centered max-width INSIDE the main pane, so the Overview
@@ -1979,6 +1995,49 @@ button.activity__text--open:hover {
 .sidebar--collapsed .sidebar__badge--active {
   top: auto;
   bottom: 0.1rem;
+}
+
+/* The usage meter sits at the rail's foot, above Collapse. */
+.sidebar__usage {
+  margin-top: auto;
+  padding: 0.55rem 0.6rem 0.2rem;
+  cursor: help;
+}
+
+.sidebar__usage-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.sidebar__usage-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.sidebar__usage-bar {
+  margin-top: 0.35rem;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--well);
+  overflow: hidden;
+}
+
+.sidebar__usage-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 1s linear;
+}
+
+.sidebar__usage + .sidebar__collapse {
+  margin-top: 0.3rem;
 }
 
 .sidebar__collapse {

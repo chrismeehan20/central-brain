@@ -39,6 +39,17 @@ export const digestDb = await JSONFilePreset<DigestData>(path.join(dataDir, "dig
   digest: null,
 });
 
+/**
+ * Observed Claude-activity instants (minute resolution, week retention) that
+ * feed the usage-window estimate — see usage/usage.ts for the window rule.
+ */
+export interface UsageData {
+  instants: string[];
+}
+export const usageDb = await JSONFilePreset<UsageData>(path.join(dataDir, "usage.json"), {
+  instants: [],
+});
+
 /** The mission-control board. Flat card list; per-column order is array order — see BoardCard. */
 export interface BoardData {
   cards: BoardCard[];
@@ -97,6 +108,13 @@ export interface SettingsData {
   setupDismissed: boolean;
   /** True once the user has dismissed the connect-your-tools card. Absent in older files. */
   hooksSetupDismissed?: boolean;
+  /**
+   * Optional ntfy topic URL for phone push (e.g. https://ntfy.sh/<topic>, or
+   * a self-hosted instance). Empty/absent = desktop notifications only. Lives
+   * in settings.json beside the API key because it's the same kind of thing:
+   * user-entered, machine-local, survives app updates.
+   */
+  ntfyUrl?: string;
   /** Absent in settings.json files written before preferences existed — read via getPreferences(). */
   preferences?: Partial<Preferences>;
 }

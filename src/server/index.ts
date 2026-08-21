@@ -13,6 +13,7 @@ import { streamRoutes } from "./routes/stream.js";
 import { openRoutes } from "./routes/open.js";
 import { hooksSetupRoutes } from "./routes/hooksSetup.js";
 import { boardRoutes } from "./routes/board.js";
+import { briefRoutes } from "./routes/brief.js";
 import { startWatcher } from "./watch/watcher.js";
 import { startCodexStalenessPoll } from "./poll/codexStaleness.js";
 import { startGithubPoller } from "./poll/githubPoller.js";
@@ -35,6 +36,7 @@ await app.register(streamRoutes);
 await app.register(openRoutes);
 await app.register(hooksSetupRoutes);
 await app.register(boardRoutes);
+await app.register(briefRoutes);
 
 // Registered in every mode: dev serves the same built client, and the Tauri
 // sidecar points CENTRAL_BRAIN_CLIENT_DIR at its bundled resources.

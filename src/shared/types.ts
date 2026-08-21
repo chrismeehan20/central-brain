@@ -246,6 +246,25 @@ export interface ActivityEvent {
   message: string;
 }
 
+/**
+ * The Claude subscription usage window, as best this machine can estimate it.
+ * Anthropic exposes no API for it, so this is inferred from observed session
+ * activity: a window opens with the first prompt after the previous window
+ * expired and lasts five hours. `estimate` is always true — the UI must say
+ * "estimated", never assert. No token math is attempted; the window's
+ * boundaries are the schedulable fact (when overnight work can start again),
+ * its fill is not knowable from here.
+ */
+export interface UsageWindow {
+  active: boolean;
+  windowStart?: string; // ISO; present when a window has been observed
+  windowEnd?: string;
+  remainingMs?: number; // present only while active
+  /** How many distinct activity minutes inform this; low counts mean a rougher guess. */
+  observations: number;
+  estimate: true;
+}
+
 export type AttentionType =
   | "permission"
   | "waiting"
@@ -377,6 +396,8 @@ export interface SettingsResponse {
   apiKey: ApiKeyStatus;
   ai: { model: string; dailyCap: number; callsRemaining: number };
   preferences: Preferences;
+  /** Phone push via ntfy. The URL is user-entered config, not a secret — it round-trips so the field can be edited. */
+  ntfy: { configured: boolean; url: string | null };
 }
 
 /**
