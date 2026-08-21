@@ -198,6 +198,28 @@ turns it off. If you ever see a "funnel" flag in examples, don't use it
 here — Funnel publishes to the open internet, which is precisely what this
 API must never be.
 
+### Let your agents use the brain (MCP)
+
+Central Brain ships an MCP server, so any Claude Code session on the machine
+can read and write the same state the dashboard shows: ask "what's waiting on
+me across every project?", pull another repo's summary and open to-dos before
+touching shared code, or file follow-up work onto the mission-control board
+as it finishes (`brain_fleet_status`, `brain_list_projects`, `brain_project`,
+`brain_board_list` / `add` / `move` / `update`, `brain_recent_activity`).
+
+Register it once, for every project:
+
+```bash
+claude mcp add --scope user central-brain -- node "$HOME/path/to/central-brain/dist/mcp-bundle.mjs"
+```
+
+(`npm run build` produces the bundle; this checkout's own sessions get it
+automatically via the committed `.mcp.json`.) The MCP process is a thin stdio
+client of the running dashboard server — it finds the port through the same
+`runtime/endpoint` file the hooks use, so `CENTRAL_BRAIN_PORT` changes need
+no reconfiguration, and it never touches the data files directly. If the app
+isn't running, tools fail with a message saying exactly that.
+
 ### How the app runs the server
 
 The menubar app owns the server's lifetime. On launch it probes port 4317: if
