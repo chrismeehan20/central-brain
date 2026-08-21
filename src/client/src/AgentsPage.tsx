@@ -4,6 +4,7 @@ import { openInVsCode } from "./api";
 import { fleetRows, type AgentRow, type AgentStatus } from "./agents";
 import { goToProject } from "./App";
 import { relativeTime } from "./format";
+import { BranchIcon } from "./Icons";
 import { useEditorName } from "./prefs";
 
 interface Props {
@@ -93,7 +94,11 @@ export default function AgentsPage({ projects, attention }: Props) {
                     {row.waitingOn ?? row.label ?? "—"}
                   </span>
                   <span className="agent-row__facts">
-                    {row.branch && <span className="agent-row__fact" title="Branch">⎇ {row.branch}</span>}
+                    {row.branch && (
+                      <span className="agent-row__fact agent-row__fact--branch" title="Branch">
+                        <BranchIcon /> {row.branch}
+                      </span>
+                    )}
                     {row.model && <span className="agent-row__fact" title="Model">{row.model}</span>}
                     {row.tokensUsed !== undefined && (
                       <span className="agent-row__fact" title="Tokens used">

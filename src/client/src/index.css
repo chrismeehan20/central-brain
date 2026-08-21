@@ -1,52 +1,84 @@
+/* One face, one job: Bricolage Grotesque carries the page and section titles,
+   where its character earns its keep. Everything functional runs on the
+   platform's own UI face — this is a Mac-resident instrument panel, and text
+   that matches the OS reads as native, not as a website visiting. Variable
+   weight axis, latin subset, self-hosted: 41KB, no network. */
 @font-face {
-  font-family: "Satoshi";
+  font-family: "Bricolage Grotesque";
   font-style: normal;
-  font-weight: 400;
+  font-weight: 200 800;
   font-display: swap;
-  src: url("/fonts/satoshi-400.woff2") format("woff2");
+  src: url("/fonts/bricolage-grotesque-latin-wght.woff2") format("woff2-variations");
 }
 
-@font-face {
-  font-family: "Satoshi";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("/fonts/satoshi-500.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "Satoshi";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/fonts/satoshi-700.woff2") format("woff2");
-}
-
+/* The theme follows the OS. Light is the authored default — this dashboard is
+   glanced at during the workday, on a desk, in daylight — and the original
+   dark world survives intact for the machines that ask for it. Every color in
+   the file routes through these tokens (tints via color-mix), so the two
+   blocks below are the entire difference between the themes. */
 :root {
-  color-scheme: dark;
-  --bg: #0b0e14;
-  --surface: #12161f;
-  --surface-raised: #171c28;
-  --border: #262c3a;
-  --ink: #e6e9f0;
-  --muted: #8891a7;
-  --accent: #7dd3fc;
-  --claude: #f5b942;
-  --codex: #4dd0e1;
-  --danger: #f87171;
+  color-scheme: light dark;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", var(--font-ui);
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --bg: #eef0f4;
+  --surface: #ffffff;
+  /* Sits ON surface (inputs, small controls), so in light it must be darker
+     than the card, not lighter — the inversion of the dark scheme's stack. */
+  --surface-raised: #f4f5f8;
+  --border: #dbdfe7;
+  --border-strong: #b6bfcc;
+  --ink: #171f2b;
+  --muted: #5a6375;
+  /* Same hue family as the dark theme's sky accent, pulled down to hold
+     4.5:1 as text on white. */
+  --accent: #0369a1;
+  --claude: #a16207;
+  --codex: #0e7490;
+  --danger: #d92d20;
   /* Red's neighbour, for a failure one step removed (a PR rather than the
      branch you're standing on). */
-  --danger-pr: #fb923c;
-  /* Fleet status colours: an agent moving right now, and one blocked on you.
-     Amber sits between them for "blocked but low-stakes" if ever needed. */
-  --ok: #4ade80;
-  --warn: #fbbf24;
+  --danger-pr: #c2410c;
+  /* Fleet status colours: an agent moving right now, and one blocked on you. */
+  --ok: #15803d;
+  --warn: #b45309;
+  /* Row separators and hover washes, by role: hairlines divide, hovers invite. */
+  --hairline: rgba(23, 31, 43, 0.08);
+  --hover: rgba(23, 31, 43, 0.045);
+  /* Light elevates with shadow; dark elevates with border and fill (its
+     shadows would land on near-black and vanish), so dark zeroes these. */
+  --shadow-card: 0 1px 2px rgba(23, 31, 43, 0.05), 0 3px 10px rgba(23, 31, 43, 0.05);
+  --shadow-lift: 0 2px 4px rgba(23, 31, 43, 0.06), 0 10px 24px rgba(23, 31, 43, 0.09);
   /* Three radii, by role rather than one value everywhere: panels, project
      cards, and small controls should not all share a corner. */
   --radius: 10px;
   --radius-card: 13px;
   --radius-card-lg: 17px;
   --radius-control: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0e14;
+    --surface: #12161f;
+    --surface-raised: #171c28;
+    --border: #262c3a;
+    --border-strong: #3a4256;
+    --ink: #e6e9f0;
+    --muted: #8891a7;
+    --accent: #7dd3fc;
+    --claude: #f5b942;
+    --codex: #4dd0e1;
+    --danger: #f87171;
+    --danger-pr: #fb923c;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --hairline: rgba(255, 255, 255, 0.06);
+    --hover: rgba(255, 255, 255, 0.04);
+    --shadow-card: none;
+    --shadow-lift: none;
+  }
 }
 
 * {
@@ -57,12 +89,33 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font-family: "Satoshi", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
+}
+
+/* The browser chrome nobody styles still carries the theme: selection, caret,
+   and scrollbars ship with defaults that belong to no design system. */
+::selection {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+input,
+textarea {
+  caret-color: var(--accent);
+}
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 button {
   font-family: inherit;
   cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .shell {
@@ -100,6 +153,12 @@ button {
 
 .topbar__meta button:hover:not(:disabled) {
   border-color: var(--accent);
+}
+
+.topbar__gear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .topbar__search {
@@ -151,9 +210,11 @@ button {
 }
 
 h1 {
-  font-size: 1.75rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.9rem;
   margin: 0 0 0.25rem;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 .subtitle {
@@ -165,6 +226,7 @@ h1 {
 .scan-time {
   color: var(--muted);
   font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .status {
@@ -182,8 +244,8 @@ h1 {
   align-items: baseline;
   gap: 0.75rem;
   margin-bottom: 1.5rem;
-  border: 1px solid rgba(248, 113, 113, 0.35);
-  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
   border-radius: var(--radius);
   padding: 0.6rem 0.9rem;
   font-size: 0.82rem;
@@ -210,8 +272,8 @@ h1 {
 
 .attention {
   margin-bottom: 2.5rem;
-  border: 1px solid rgba(248, 113, 113, 0.4);
-  background: rgba(248, 113, 113, 0.06);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
   border-radius: var(--radius);
   padding: 1rem 1.1rem;
 }
@@ -235,7 +297,7 @@ h1 {
   flex-wrap: wrap;
   font-size: 0.85rem;
   padding: 0.4rem 0.1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .attention__item:last-child {
@@ -270,7 +332,7 @@ button.attention__lead {
 }
 
 button.attention__lead:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover);
 }
 
 button.attention__lead:focus-visible {
@@ -296,7 +358,7 @@ button.attention__lead:focus-visible {
 .attention__control:hover:not(:disabled) {
   border-color: var(--border);
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover);
 }
 
 .attention__control:focus-visible {
@@ -314,7 +376,7 @@ button.attention__lead:focus-visible {
 }
 
 .attention__control--dismiss:hover:not(:disabled) {
-  border-color: rgba(248, 113, 113, 0.5);
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
   color: var(--danger);
 }
 
@@ -329,18 +391,18 @@ button.attention__lead:focus-visible {
   font-size: 0.72rem;
   border-radius: 5px;
   padding: 0.15rem 0.55rem;
-  background: rgba(248, 113, 113, 0.18);
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
   color: var(--danger);
   white-space: nowrap;
 }
 
 .attention__item--waiting .attention__badge {
-  background: rgba(245, 185, 66, 0.15);
+  background: color-mix(in srgb, var(--claude) 15%, transparent);
   color: var(--claude);
 }
 
 .attention__item--codex-maybe-waiting .attention__badge {
-  background: rgba(77, 208, 225, 0.15);
+  background: color-mix(in srgb, var(--codex) 15%, transparent);
   color: var(--codex);
 }
 
@@ -469,8 +531,9 @@ button.attention__lead:focus-visible {
 }
 
 .section__title {
+  font-family: var(--font-display);
   font-size: 1.05rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--muted);
   margin: 0 0 0.9rem;
   display: flex;
@@ -524,11 +587,13 @@ button.attention__lead:focus-visible {
   padding: 0.9rem 1rem 0.85rem;
   display: flex;
   flex-direction: column;
-  transition: border-color 0.15s ease;
+  box-shadow: var(--shadow-card);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .card:hover {
-  border-color: #3a4256;
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lift);
 }
 
 /* Pinned projects are the ones being worked on, so they get real presence
@@ -611,7 +676,7 @@ button.attention__lead:focus-visible {
   font-weight: 600;
   border-radius: var(--radius-control);
   padding: 0.15rem 0.5rem;
-  background: rgba(248, 113, 113, 0.15);
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
   color: var(--danger);
 }
 
@@ -619,7 +684,7 @@ button.attention__lead:focus-visible {
    further away — so: same pill, shifted off red toward amber, so the two are
    never mistaken for each other when they appear side by side. */
 .flag--pr-failing {
-  background: rgba(251, 146, 60, 0.15);
+  background: color-mix(in srgb, var(--danger-pr) 15%, transparent);
   color: var(--danger-pr);
 }
 
@@ -724,7 +789,7 @@ button.attention__lead:focus-visible {
 
 .relocate__path,
 .relocate__select {
-  font-family: "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.72rem;
   color: var(--ink);
   overflow: hidden;
@@ -857,7 +922,7 @@ button.attention__lead:focus-visible {
 .card__path {
   color: var(--muted);
   font-size: 0.7rem;
-  font-family: "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   margin-top: 0.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -872,7 +937,7 @@ button.attention__lead:focus-visible {
   display: block;
   width: 100%;
   text-align: left;
-  font-family: "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 .card__path--open:hover {
@@ -909,7 +974,7 @@ button.attention__lead:focus-visible {
    .flag, which is reserved for states worth interrupting for. Clicking it
    dismisses the badge (writes an empty override). */
 .card__new {
-  background: rgba(125, 211, 252, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   border: none;
   color: var(--accent);
   font-size: 0.68rem;
@@ -921,7 +986,7 @@ button.attention__lead:focus-visible {
 }
 
 .card__new:hover {
-  background: rgba(125, 211, 252, 0.25);
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 /* Pin/Hide as icon buttons, grouped at the right edge of the action row. */
@@ -1008,8 +1073,8 @@ button.attention__lead:focus-visible {
 .detail__cap {
   color: var(--claude);
   font-size: 0.82rem;
-  background: rgba(245, 185, 66, 0.1);
-  border: 1px solid rgba(245, 185, 66, 0.3);
+  background: color-mix(in srgb, var(--claude) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--claude) 30%, transparent);
   border-radius: var(--radius);
   padding: 0.5rem 0.8rem;
   margin: 0 0 1rem;
@@ -1022,8 +1087,8 @@ button.attention__lead:focus-visible {
   gap: 0.6rem;
   color: var(--muted);
   font-size: 0.82rem;
-  background: rgba(125, 211, 252, 0.07);
-  border: 1px solid rgba(125, 211, 252, 0.25);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
   border-radius: var(--radius);
   padding: 0.5rem 0.8rem;
   margin: 0 0 1rem;
@@ -1093,7 +1158,7 @@ button.attention__lead:focus-visible {
   gap: 0.5rem;
   padding: 0.35rem 0.1rem;
   font-size: 0.85rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .ditem:last-child {
@@ -1110,7 +1175,7 @@ button.attention__lead:focus-visible {
 }
 
 .ditem__check:hover {
-  color: #4ade80;
+  color: var(--ok);
 }
 
 .ditem__text {
@@ -1129,7 +1194,7 @@ button.attention__lead:focus-visible {
 
 .ditem__origin--ai {
   color: var(--accent);
-  background: rgba(125, 211, 252, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .ditem__dismiss,
@@ -1238,7 +1303,7 @@ button.attention__lead:focus-visible {
   gap: 0.5rem;
   font-size: 0.82rem;
   padding: 0.3rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .activity__row:last-child {
@@ -1607,7 +1672,7 @@ button.activity__text--open:hover {
 }
 
 .relocate__confidence--high {
-  color: #4ade80;
+  color: var(--ok);
 }
 
 .relocate__confidence--medium {
@@ -1620,7 +1685,7 @@ button.activity__text--open:hover {
 
 /* Detail page: branch and activity labels as text, matching the cards. */
 .detail__branch {
-  font-family: "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.78rem;
   color: var(--muted);
 }
@@ -1714,10 +1779,8 @@ button.activity__text--open:hover {
 }
 
 .sidebar__mark {
-  font-size: 1.25rem;
-  line-height: 1;
+  display: inline-flex;
   color: var(--accent);
-  text-shadow: 0 0 14px rgba(125, 211, 252, 0.55);
 }
 
 .sidebar__name {
@@ -1807,12 +1870,12 @@ button.activity__text--open:hover {
 }
 
 .sidebar__badge--waiting {
-  background: rgba(248, 113, 113, 0.16);
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
   color: var(--danger);
 }
 
 .sidebar__badge--active {
-  background: rgba(74, 222, 128, 0.14);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
   color: var(--ok);
 }
 
@@ -1892,14 +1955,14 @@ button.activity__text--open:hover {
 }
 
 .status-dot--active {
-  background: var(--ok);
-  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.5);
+  color: var(--ok);
+  background: currentColor;
   animation: status-pulse 2.4s ease-out infinite;
 }
 
 .status-dot--waiting {
-  background: var(--danger);
-  box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.5);
+  color: var(--danger);
+  background: currentColor;
   animation: status-pulse 1.6s ease-out infinite;
 }
 
@@ -1973,7 +2036,7 @@ button.activity__text--open:hover {
 }
 
 .fleet-chip--waiting {
-  border-color: rgba(248, 113, 113, 0.45);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
 }
 
 .fleet-chip__project {
@@ -1996,7 +2059,8 @@ button.activity__text--open:hover {
 
 .fleet-chip__branch {
   color: var(--muted);
-  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
   max-width: 14rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2030,6 +2094,7 @@ button.activity__text--open:hover {
   min-height: 12rem;
   display: flex;
   flex-direction: column;
+  box-shadow: var(--shadow-card);
 }
 
 .board-col--drop {
@@ -2112,11 +2177,12 @@ button.activity__text--open:hover {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  transition: border-color 120ms ease, opacity 120ms ease;
+  transition: border-color 120ms ease, opacity 120ms ease, box-shadow 120ms ease;
 }
 
 .board-card:hover {
-  border-color: var(--accent);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-card);
 }
 
 .board-card--dragging {
@@ -2179,13 +2245,28 @@ button.activity__text--open:hover {
   align-items: center;
   gap: 0.35rem;
   min-width: 0;
+}
+
+/* Ellipsis lives on the name, its own flex child — text-overflow on the flex
+   container silently clips nested spans mid-word instead of eliding. */
+.board-card__project-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .board-card__status {
+  flex-shrink: 0;
   color: var(--muted);
+}
+
+.board-card__status--waiting {
+  color: var(--danger);
+}
+
+.board-card__status--active {
+  color: var(--ok);
 }
 
 .board-card__age {
@@ -2268,7 +2349,9 @@ button.activity__text--open:hover {
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
+  font-family: var(--font-display);
   font-size: 0.95rem;
+  font-weight: 600;
   margin: 0 0 0.6rem;
 }
 
@@ -2305,11 +2388,12 @@ button.activity__text--open:hover {
   border-radius: var(--radius-card);
   padding: 0.55rem 0.85rem;
   font-size: 0.83rem;
+  box-shadow: var(--shadow-card);
 }
 
 .agent-row--waiting {
-  border-color: rgba(248, 113, 113, 0.4);
-  background: rgba(248, 113, 113, 0.05);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 5%, transparent);
 }
 
 .agent-row__tool {
@@ -2367,12 +2451,21 @@ button.activity__text--open:hover {
   font-size: 0.72rem;
 }
 
+.agent-row__fact--branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
 .agent-row__age {
   flex-shrink: 0;
   color: var(--muted);
   font-size: 0.72rem;
   min-width: 3.6rem;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .agent-row__open {

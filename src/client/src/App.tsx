@@ -36,6 +36,7 @@ import HooksPanel from "./HooksPanel";
 import BoardPage from "./BoardPage";
 import AgentsPage from "./AgentsPage";
 import ActivityPage from "./ActivityPage";
+import { GearIcon } from "./Icons";
 import { relativeTime } from "./format";
 
 const DETAIL_PREFIX = "#/project/";
@@ -360,11 +361,12 @@ export default function App() {
             {scanning ? "Scanning…" : "Rescan"}
           </button>
           <button
+            className="topbar__gear"
             onClick={() => setSettingsOpen((open) => !open)}
             title="Settings"
             aria-label="Settings"
           >
-            ⚙
+            <GearIcon />
           </button>
         </div>
       </header>

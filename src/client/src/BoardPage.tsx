@@ -382,8 +382,16 @@ function CardView({
             {card.projectPath && (
               <span className="board-card__project">
                 {status && <span className={`status-dot status-dot--${status}`} aria-hidden />}
-                {projectName ?? card.projectPath.split("/").filter(Boolean).pop()}
-                {status && <span className="board-card__status"> · {STATUS_COPY[status]}</span>}
+                <span className="board-card__project-name">
+                  {projectName ?? card.projectPath.split("/").filter(Boolean).pop()}
+                </span>
+                {/* Idle earns only the gray dot — spelling it out on every
+                    card would make the two states that matter read as noise. */}
+                {status && status !== "idle" && (
+                  <span className={`board-card__status board-card__status--${status}`}>
+                    {STATUS_COPY[status]}
+                  </span>
+                )}
               </span>
             )}
             <span className="board-card__age">

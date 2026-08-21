@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FleetCounts } from "./agents";
-import { BotIcon, GridIcon, KanbanIcon, PanelIcon, PulseIcon } from "./Icons";
+import { BotIcon, BrandMark, GridIcon, KanbanIcon, PanelIcon, PulseIcon } from "./Icons";
 
 export type OsView = "overview" | "board" | "agents" | "activity";
 
@@ -58,7 +58,7 @@ export default function Sidebar({ view, counts }: Props) {
     <nav className={`sidebar${collapsed ? " sidebar--collapsed" : ""}`} aria-label="Views">
       <a className="sidebar__brand" href="#" title="Central Brain">
         <span className="sidebar__mark" aria-hidden>
-          ◉
+          <BrandMark />
         </span>
         {!collapsed && (
           <span className="sidebar__name">
