@@ -335,6 +335,17 @@ rather than pretending to accept a value it would ignore. Note that a packaged
 To stop using AI, click **Remove key** (or **Skip for now** on first run, since
 the dashboard is fully usable without it).
 
+## Companion: Belfry
+
+[Belfry](https://github.com/chrismeehan20/belfry) is the social media and
+content tool built on the same stack and design language. When both run on
+this machine, Belfry reads Central Brain's `/api/brief` (default
+`http://127.0.0.1:4317`, configurable in Belfry's Settings) as source
+material for its idea miner — what your agents shipped today becomes
+tomorrow's build-in-public post, with Belfry's human approval gate between
+the two. Nothing is needed on this side: the brief endpoint Siri already
+uses is the whole integration surface.
+
 ## Development
 
 ```bash
