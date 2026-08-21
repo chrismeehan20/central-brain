@@ -33,7 +33,7 @@
   --muted: #5a6375;
   /* Same hue family as the dark theme's sky accent, pulled down to hold
      4.5:1 as text on white. */
-  --accent: #0369a1;
+  --accent: #0b64c8;
   --claude: #a16207;
   --codex: #0e7490;
   --danger: #d92d20;
@@ -43,19 +43,30 @@
   /* Fleet status colours: an agent moving right now, and one blocked on you. */
   --ok: #15803d;
   --warn: #b45309;
-  /* Row separators and hover washes, by role: hairlines divide, hovers invite. */
+  /* Row separators and hover washes, by role: hairlines divide, hovers invite.
+     Hovering is a FILL in this language, never a border-color trick — the row
+     lights up under the cursor the way a native list row does. */
   --hairline: rgba(23, 31, 43, 0.08);
-  --hover: rgba(23, 31, 43, 0.045);
-  /* Light elevates with shadow; dark elevates with border and fill (its
-     shadows would land on near-black and vanish), so dark zeroes these. */
-  --shadow-card: 0 1px 2px rgba(23, 31, 43, 0.05), 0 3px 10px rgba(23, 31, 43, 0.05);
-  --shadow-lift: 0 2px 4px rgba(23, 31, 43, 0.06), 0 10px 24px rgba(23, 31, 43, 0.09);
+  --hover: rgba(23, 31, 43, 0.05);
+  /* A well is a recessed region content floats in (board columns, list
+     panels): slightly darker than the page in light, deeper than the page in
+     dark, never outlined. */
+  --well: rgba(23, 31, 43, 0.045);
+  /* A soft border defines a floating card without drawing a box around it —
+     the shadow does the talking; this just crisps the edge. */
+  --border-soft: rgba(23, 31, 43, 0.07);
+  /* Light elevates with layered shadow (ambient + key); dark elevates with a
+     lit top edge and fill (its shadows land on near-black and vanish), so
+     dark zeroes the shadows and lights the edge instead. */
+  --shadow-card: 0 1px 2px rgba(23, 31, 43, 0.05), 0 4px 14px rgba(23, 31, 43, 0.06);
+  --shadow-lift: 0 2px 6px rgba(23, 31, 43, 0.07), 0 12px 28px rgba(23, 31, 43, 0.1);
+  --edge-highlight: 0 0 #0000;
   /* Three radii, by role rather than one value everywhere: panels, project
      cards, and small controls should not all share a corner. */
-  --radius: 10px;
-  --radius-card: 13px;
-  --radius-card-lg: 17px;
-  --radius-control: 6px;
+  --radius: 12px;
+  --radius-card: 14px;
+  --radius-card-lg: 18px;
+  --radius-control: 8px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -75,9 +86,12 @@
     --ok: #4ade80;
     --warn: #fbbf24;
     --hairline: rgba(255, 255, 255, 0.06);
-    --hover: rgba(255, 255, 255, 0.04);
+    --hover: rgba(255, 255, 255, 0.05);
+    --well: rgba(0, 0, 0, 0.22);
+    --border-soft: rgba(255, 255, 255, 0.07);
     --shadow-card: none;
     --shadow-lift: none;
+    --edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.07);
   }
 }
 
@@ -118,6 +132,53 @@ button {
   outline-offset: 2px;
 }
 
+/* The one authored moment: a view presents by rising 6px as it fades in,
+   once, on navigation — pages remount per route, so polling re-renders never
+   replay it. Controls answer the hand instead with a press (below). */
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.os__main > main {
+  animation: view-in 200ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+/* Tactile press on real controls — buttons that DO something give 2% under
+   the finger. Text-like buttons (row leads, title toggles) stay still. */
+.topbar__meta button:active,
+.section__action:active,
+.agent-row__open:active,
+.agents__more:active,
+.fleet-chip:active,
+.chip:active,
+.board-col__add:active,
+.board-card__actions button:active,
+.sidebar__item:active,
+.sidebar__collapse:active {
+  transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .os__main > main {
+    animation: none;
+  }
+  .topbar__meta button:active,
+  .section__action:active,
+  .agent-row__open:active,
+  .agents__more:active,
+  .fleet-chip:active,
+  .chip:active,
+  .board-col__add:active,
+  .board-card__actions button:active,
+  .sidebar__item:active,
+  .sidebar__collapse:active {
+    transform: none;
+  }
+}
+
 .shell {
   max-width: 1180px;
   margin: 0 auto;
@@ -143,16 +204,19 @@ button {
 }
 
 .topbar__meta button {
-  background: var(--surface-raised);
+  background: var(--surface);
   color: var(--ink);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: var(--edge-highlight), var(--shadow-card);
+  transition: background 120ms ease, transform 80ms ease;
 }
 
 .topbar__meta button:hover:not(:disabled) {
-  border-color: var(--accent);
+  background: var(--surface-raised);
 }
 
 .topbar__gear {
@@ -162,8 +226,8 @@ button {
 }
 
 .topbar__search {
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   color: var(--ink);
   font-family: inherit;
@@ -172,11 +236,14 @@ button {
   flex: 1 1 12rem;
   min-width: 0;
   max-width: 240px;
+  box-shadow: var(--edge-highlight), var(--shadow-card);
+  transition: box-shadow 120ms ease;
 }
 
 .topbar__search:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 /* Pulled up under the topbar's own bottom margin so the chips read as part of
@@ -189,23 +256,27 @@ button {
 }
 
 .chip {
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
   color: var(--muted);
   font-size: 0.75rem;
-  padding: 0.25rem 0.6rem;
+  font-weight: 500;
+  padding: 0.28rem 0.7rem;
+  transition: background 120ms ease, transform 80ms ease;
 }
 
 .chip:hover {
-  border-color: var(--accent);
+  background: var(--hover);
   color: var(--ink);
 }
 
-/* On is a colour change, not a fill — four lit chips should still be quieter
-   than the project cards they are filtering. */
+/* On is a filled state — the chip you pressed stays lit, the way a native
+   filter segment does — but tinted, so four lit chips still sit quieter
+   than the cards they filter. */
 .chip--on {
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: transparent;
   color: var(--accent);
 }
 
@@ -272,10 +343,11 @@ h1 {
 
 .attention {
   margin-bottom: 2.5rem;
-  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 22%, transparent);
   background: color-mix(in srgb, var(--danger) 6%, transparent);
-  border-radius: var(--radius);
+  border-radius: var(--radius-card-lg);
   padding: 1rem 1.1rem;
+  box-shadow: var(--shadow-card);
 }
 
 .attention__title {
@@ -516,14 +588,20 @@ button.attention__lead:focus-visible {
 }
 
 .section__action {
-  background: var(--surface-raised);
-  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: none;
   color: var(--accent);
-  border-radius: 6px;
-  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-control);
+  padding: 0.35rem 0.75rem;
   font-size: 0.75rem;
+  font-weight: 500;
   white-space: nowrap;
   margin-bottom: 0.9rem;
+  transition: background 120ms ease, transform 80ms ease;
+}
+
+.section__action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .section__action:disabled {
@@ -582,18 +660,18 @@ button.attention__lead:focus-visible {
 
 .card {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-card);
   padding: 0.9rem 1rem 0.85rem;
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-card);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: var(--edge-highlight), var(--shadow-card);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .card:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-lift);
+  box-shadow: var(--edge-highlight), var(--shadow-lift);
+  transform: translateY(-1px);
 }
 
 /* Pinned projects are the ones being worked on, so they get real presence
@@ -1388,16 +1466,19 @@ button.activity__text--open:hover {
 
 .setup {
   margin-bottom: 2.5rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   background: var(--surface);
-  border-radius: var(--radius);
-  padding: 1rem 1.1rem;
+  border-radius: var(--radius-card-lg);
+  padding: 1.1rem 1.25rem;
+  box-shadow: var(--edge-highlight), var(--shadow-card);
 }
 
-/* First-run gets an accent edge; the same panel behind the gear stays quiet. */
+/* First-run gets a quiet accent wash; the same panel behind the gear stays
+   plain. A wash over a floating card, never an outlined box — the outline
+   version shouted over the grid it was introducing. */
 .setup--onboarding {
-  border-color: var(--accent);
-  background: var(--surface-raised);
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .setup__header {
@@ -1457,18 +1538,23 @@ button.activity__text--open:hover {
 }
 
 .setup__row button {
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: none;
+  border-radius: var(--radius-control);
+  color: var(--accent);
   font-size: 0.8rem;
-  padding: 0.5rem 0.85rem;
+  font-weight: 500;
+  padding: 0.5rem 0.9rem;
   white-space: nowrap;
+  transition: background 120ms ease, transform 80ms ease;
+}
+
+.setup__row button:active {
+  transform: scale(0.98);
 }
 
 .setup__row button:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .setup__row button:disabled {
@@ -1810,45 +1896,35 @@ button.activity__text--open:hover {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.5rem 0.55rem;
+  padding: 0.5rem 0.6rem;
   border-radius: var(--radius);
   color: var(--muted);
   text-decoration: none;
   font-size: 0.875rem;
-  border: 1px solid transparent;
+  font-weight: 500;
+  transition: background 120ms ease, color 120ms ease, transform 80ms ease;
 }
 
 .sidebar__item:hover {
   color: var(--ink);
-  background: var(--surface-raised);
+  background: var(--hover);
 }
 
+/* The active view is a filled, accent-tinted pill — one lit shape, readable
+   from the corner of the eye, with nothing else competing for the row. */
 .sidebar__item--active {
-  color: var(--ink);
-  background: var(--surface-raised);
-  border-color: var(--border);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
 }
 
-/* A thin lit edge instead of a filled pill: the active view should read at a
-   glance without outshining the live badges next to it. */
-.sidebar__item--active::before {
-  content: "";
-  position: absolute;
-  left: -0.8rem;
-  top: 20%;
-  bottom: 20%;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--accent);
+.sidebar__item--active:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .sidebar--collapsed .sidebar__item {
   justify-content: center;
   padding: 0.55rem 0;
-}
-
-.sidebar--collapsed .sidebar__item--active::before {
-  left: -0.6rem;
 }
 
 .sidebar__label {
@@ -2023,20 +2099,24 @@ button.activity__text--open:hover {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.4rem 0.75rem;
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
+  padding: 0.4rem 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
   border-radius: 999px;
   color: var(--ink);
   font-size: 0.8rem;
+  box-shadow: var(--edge-highlight), var(--shadow-card);
+  transition: background 120ms ease, transform 80ms ease, box-shadow 120ms ease;
 }
 
 .fleet-chip:hover {
-  border-color: var(--accent);
+  background: var(--surface-raised);
+  box-shadow: var(--edge-highlight), var(--shadow-lift);
 }
 
 .fleet-chip--waiting {
-  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 25%, transparent);
 }
 
 .fleet-chip__project {
@@ -2087,18 +2167,17 @@ button.activity__text--open:hover {
 }
 
 .board-col {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--well);
   border-radius: var(--radius-card-lg);
-  padding: 0.8rem;
+  padding: 0.7rem;
   min-height: 12rem;
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-card);
+  transition: box-shadow 120ms ease;
 }
 
 .board-col--drop {
-  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .board-col__head {
@@ -2160,13 +2239,14 @@ button.activity__text--open:hover {
 
 .board-compose__input {
   width: 100%;
-  background: var(--surface-raised);
-  border: 1px solid var(--accent);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
   border-radius: var(--radius);
   color: var(--ink);
   font-family: inherit;
   font-size: 0.85rem;
   padding: 0.55rem 0.7rem;
+  box-shadow: var(--shadow-card);
 }
 
 .board-compose__input:focus {
@@ -2174,15 +2254,16 @@ button.activity__text--open:hover {
 }
 
 .board-card {
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-card);
-  transition: border-color 120ms ease, opacity 120ms ease, box-shadow 120ms ease;
+  box-shadow: var(--edge-highlight), var(--shadow-card);
+  transition: opacity 120ms ease, box-shadow 120ms ease, transform 120ms ease;
 }
 
 .board-card:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--edge-highlight), var(--shadow-lift);
+  transform: translateY(-1px);
 }
 
 .board-card--dragging {
@@ -2284,8 +2365,8 @@ button.activity__text--open:hover {
 .board-card__textarea,
 .board-card__select {
   width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-control);
   color: var(--ink);
   font-family: inherit;
@@ -2311,20 +2392,23 @@ button.activity__text--open:hover {
 }
 
 .board-card__actions button {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-control);
   color: var(--ink);
   font-size: 0.75rem;
-  padding: 0.3rem 0.6rem;
+  font-weight: 500;
+  padding: 0.3rem 0.65rem;
+  transition: background 120ms ease, transform 80ms ease;
 }
 
 .board-card__actions button:hover:not(:disabled) {
-  border-color: var(--accent);
+  background: var(--hover);
 }
 
 .board-card__save {
-  border-color: var(--accent) !important;
+  background: color-mix(in srgb, var(--accent) 12%, transparent) !important;
+  border-color: transparent !important;
   color: var(--accent) !important;
 }
 
@@ -2376,24 +2460,34 @@ button.activity__text--open:hover {
 .agents__list {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.1rem;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-card-lg);
+  padding: 0.35rem;
+  box-shadow: var(--edge-highlight), var(--shadow-card);
 }
 
 .agent-row {
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  padding: 0.55rem 0.85rem;
+  border-radius: var(--radius);
+  padding: 0.55rem 0.75rem;
   font-size: 0.83rem;
-  box-shadow: var(--shadow-card);
+  transition: background 120ms ease;
+}
+
+.agent-row:hover {
+  background: var(--hover);
 }
 
 .agent-row--waiting {
-  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
-  background: color-mix(in srgb, var(--danger) 5%, transparent);
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+}
+
+.agent-row--waiting:hover {
+  background: color-mix(in srgb, var(--danger) 11%, transparent);
 }
 
 .agent-row__tool {
@@ -2471,30 +2565,36 @@ button.activity__text--open:hover {
 .agent-row__open {
   flex-shrink: 0;
   background: var(--surface-raised);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-control);
   color: var(--ink);
   font-size: 0.75rem;
-  padding: 0.3rem 0.7rem;
+  font-weight: 500;
+  padding: 0.3rem 0.75rem;
+  box-shadow: var(--edge-highlight);
+  transition: background 120ms ease, transform 80ms ease;
 }
 
 .agent-row__open:hover {
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
 }
 
 .agents__more {
   margin-top: 0.6rem;
   background: none;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius-control);
   color: var(--muted);
   font-size: 0.78rem;
+  font-weight: 500;
   padding: 0.35rem 0.8rem;
+  transition: background 120ms ease, transform 80ms ease;
 }
 
 .agents__more:hover {
   color: var(--ink);
-  border-color: var(--accent);
+  background: var(--hover);
 }
 
 /* On narrow screens the middle facts go; the row keeps status, names, age. */
@@ -2518,22 +2618,27 @@ button.activity__text--open:hover {
 .feed {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0.35rem;
   display: flex;
   flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--edge-highlight), var(--shadow-card);
 }
 
 .feed__row {
   display: flex;
   align-items: baseline;
   gap: 0.7rem;
-  padding: 0.5rem 0.25rem;
-  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius);
   font-size: 0.84rem;
+  transition: background 120ms ease;
 }
 
-.feed__row:last-child {
-  border-bottom: none;
+.feed__row:hover {
+  background: var(--hover);
 }
 
 /* The tool marker is a slim colored tick rather than a word: at feed density
