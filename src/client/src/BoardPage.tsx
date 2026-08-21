@@ -4,6 +4,7 @@ import { BOARD_COLUMNS } from "@shared/types";
 import {
   createBoardCard,
   deleteBoardCard,
+  dispatchBoardCard,
   fetchBoard,
   moveBoardCard,
   openInVsCode,
@@ -305,6 +306,10 @@ export default function BoardPage({ projects, attention }: Props) {
                       setEditingId(null);
                       void mutate(() => deleteBoardCard(card.id));
                     }}
+                    onDispatch={(freshWorktree) => {
+                      setEditingId(null);
+                      void mutate(() => dispatchBoardCard(card.id, freshWorktree));
+                    }}
                   />
                 ))}
                 {/* Insertion line for an append at the end of the column. */}
@@ -335,6 +340,7 @@ interface CardViewProps {
   onToggleEdit: () => void;
   onSave: (patch: { title?: string; note?: string; projectPath?: string | null }) => void;
   onDelete: () => void;
+  onDispatch: (freshWorktree: boolean) => void;
 }
 
 function CardView({
@@ -351,10 +357,12 @@ function CardView({
   onToggleEdit,
   onSave,
   onDelete,
+  onDispatch,
 }: CardViewProps) {
   const [title, setTitle] = useState(card.title);
   const [note, setNote] = useState(card.note ?? "");
   const [projectPath, setProjectPath] = useState(card.projectPath ?? "");
+  const [freshWorktree, setFreshWorktree] = useState(false);
 
   // Re-arm the form whenever a different card opens for editing (or the same
   // card's server state changes underneath a closed form).
@@ -378,6 +386,15 @@ function CardView({
         <button className="board-card__body" onClick={onToggleEdit} title="Edit this card">
           <span className="board-card__title">{card.title}</span>
           {card.note && <span className="board-card__note">{card.note}</span>}
+          {card.dispatch && (
+            <span
+              className="board-card__dispatched"
+              title={`An agent was started in ${card.dispatch.path}`}
+            >
+              agent started {relativeTime(card.dispatch.at)}
+              {card.dispatch.branch ? ` on ${card.dispatch.branch}` : ""}
+            </span>
+          )}
           <span className="board-card__meta">
             {card.projectPath && (
               <span className="board-card__project">
@@ -447,6 +464,29 @@ function CardView({
               <option value={projectPath}>{projectPath}</option>
             )}
           </select>
+          {/* Dispatch: the card becomes a running agent. Only offered when the
+              card is linked to a project the server can trust, and never from
+              "done" — restarting finished work is a decision, not a misclick. */}
+          {card.projectPath && card.column !== "done" && (
+            <div className="board-card__dispatch">
+              <button
+                type="button"
+                className="board-card__dispatch-btn"
+                onClick={() => onDispatch(freshWorktree)}
+                title="Open a Terminal running Claude Code, seeded with this card"
+              >
+                Start agent
+              </button>
+              <label className="board-card__dispatch-opt">
+                <input
+                  type="checkbox"
+                  checked={freshWorktree}
+                  onChange={(e) => setFreshWorktree(e.target.checked)}
+                />
+                in a fresh worktree
+              </label>
+            </div>
+          )}
           <div className="board-card__actions">
             <button type="submit" className="board-card__save" disabled={!title.trim()}>
               Save

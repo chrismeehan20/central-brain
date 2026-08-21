@@ -7,6 +7,8 @@ import {
   moveCard,
   updateCard,
 } from "../board/board.js";
+import { performDispatch, resolveDispatch } from "../board/dispatch.js";
+import { getCachedProjects, getLastScanAt, runScan } from "../scan/index.js";
 
 /** Card titles and notes are user text shown back to the user only; the one hard rule is "not empty, not absurd". */
 const MAX_TITLE = 300;
@@ -121,6 +123,46 @@ export async function boardRoutes(app: FastifyInstance) {
     }
     return { cards };
   });
+
+  // "Start agent": launch a Claude Code session on this card's project (in a
+  // fresh worktree when asked). Resolution is pure and enforces the same
+  // trust rule as /api/open — only scanner-known paths reach a shell.
+  app.post<{ Body: { id?: unknown; freshWorktree?: unknown } }>(
+    "/api/board/dispatch",
+    async (req, reply) => {
+      const id = req.body?.id;
+      if (typeof id !== "string" || !id) {
+        reply.code(400);
+        return { error: "id is required" };
+      }
+      const card = getBoardCards().find((c) => c.id === id);
+      if (!card) {
+        reply.code(404);
+        return { error: "no card with that id" };
+      }
+      if (!getLastScanAt()) runScan();
+      const resolved = resolveDispatch({
+        card,
+        projects: getCachedProjects(),
+        freshWorktree: req.body?.freshWorktree === true,
+      });
+      if ("error" in resolved) {
+        reply.code(400);
+        return { error: resolved.error };
+      }
+      try {
+        const cards = await performDispatch(id, resolved.plan);
+        return {
+          cards,
+          startedIn: resolved.plan.cwd,
+          ...(resolved.plan.worktree ? { branch: resolved.plan.worktree.branch } : {}),
+        };
+      } catch (err) {
+        reply.code(500);
+        return { error: (err as Error).message };
+      }
+    },
+  );
 
   // Id in the body, matching the attention mutations: uniform client code, and
   // no URL-encoding questions for ids in path segments.

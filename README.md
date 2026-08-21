@@ -41,6 +41,18 @@ dashboard, but that path is neither packaged nor supported.)
   agent finishes without telling anyone. A fleet strip on top shows every
   non-idle agent; clicking a chip jumps to the exact chat that's moving (or
   stuck).
+- **Start an agent from a card.** A linked card's editor has a **Start
+  agent** button: it opens a Terminal running Claude Code seeded with the
+  card's title and notes, moves the card to In progress, and records where
+  the agent ran. Tick *in a fresh worktree* and the card first gets its own
+  checkout (`<repo>-agents/<slug>`, branch `agent/<slug>`), so parallel
+  cards never fight over one working tree — the scanner folds the new
+  worktree into the project's card automatically. The session is a normal
+  interactive one, with all of Claude Code's own permission prompts; only
+  paths the scanner itself discovered can ever be dispatched to. Its brief
+  ends by asking the agent to land its work and update the board over MCP,
+  which closes the loop: plan on the board, run from the board, done on the
+  board.
 - **Agents roster.** Every Claude and Codex session across your projects
   (`#/agents`), waiting-on-you first, then active (moved in the last 10
   minutes), then the rest of the last 48 hours — with branch, model, and

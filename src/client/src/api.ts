@@ -171,6 +171,22 @@ export function deleteBoardCard(id: string): Promise<{ cards: BoardCard[] }> {
   return boardMutation("/api/board/delete", "POST", { id });
 }
 
+/**
+ * "Start agent": opens a Terminal running Claude Code seeded with this card,
+ * optionally in a fresh git worktree. Returns where it started so the UI can
+ * say so.
+ */
+export function dispatchBoardCard(
+  id: string,
+  freshWorktree: boolean
+): Promise<{ cards: BoardCard[]; startedIn: string; branch?: string }> {
+  return boardMutation("/api/board/dispatch", "POST", { id, freshWorktree }) as Promise<{
+    cards: BoardCard[];
+    startedIn: string;
+    branch?: string;
+  }>;
+}
+
 /** The estimated Claude usage window; see UsageWindow for what "estimated" claims. */
 export async function fetchUsage(): Promise<{ claude: UsageWindow }> {
   const res = await fetch("/api/usage");

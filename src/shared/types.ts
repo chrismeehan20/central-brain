@@ -224,6 +224,16 @@ export interface BoardCard {
   updatedAt: string;
   /** Set when the card entered "done"; cleared if it moves back out. */
   doneAt?: string;
+  /**
+   * Set when "Start agent" launched a session for this card: where it ran and
+   * on which branch. A record, not live state — the agent's liveness still
+   * comes from the fleet derivation like every other session's.
+   */
+  dispatch?: {
+    at: string; // ISO
+    path: string; // the checkout the agent was started in
+    branch?: string; // present when a fresh worktree was cut
+  };
 }
 
 /**

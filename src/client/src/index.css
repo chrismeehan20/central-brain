@@ -2436,6 +2436,51 @@ button.activity__text--open:hover {
   flex-shrink: 0;
 }
 
+.board-card__dispatched {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+/* Dispatch is the card's power move: a filled accent button, set apart from
+   the plain edit actions below it by a hairline. */
+.board-card__dispatch {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.board-card__dispatch-btn {
+  white-space: nowrap;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-control);
+  color: var(--surface);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.4rem 0.8rem;
+  transition: filter 120ms ease, transform 80ms ease;
+}
+
+.board-card__dispatch-btn:hover {
+  filter: brightness(1.12);
+}
+
+.board-card__dispatch-btn:active {
+  transform: scale(0.98);
+}
+
+.board-card__dispatch-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
 .board-card__form {
   display: flex;
   flex-direction: column;
