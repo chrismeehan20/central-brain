@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { AttentionItem, Project, SessionRef } from "@shared/types.js";
 import {
   CHAT_DEEP_LINK_DELAY_MS,
+  buildBrowserOpen,
   buildTerminalResume,
   escapeAppleScript,
   resolveOpenAction,
@@ -306,4 +307,20 @@ test("a session with no checkoutPath keeps resolving to the project's own path",
   assert.ok(!("error" in res));
   assert.equal(res.kind, "terminal-resume");
   assert.match(res.steps[0].args.join(" "), /code\/widget'/);
+});
+
+/**
+ * `buildBrowserOpen` hands a string to `open(1)`, which launches whatever app
+ * has registered the scheme — so the allowlist is a boundary, not a nicety.
+ */
+test("only https github URLs can be opened in the browser", () => {
+  assert.deepEqual(buildBrowserOpen("https://github.com/o/r/pull/11"), {
+    cmd: "open",
+    args: ["https://github.com/o/r/pull/11"],
+  });
+  assert.equal(buildBrowserOpen("http://github.com/o/r/pull/11"), null, "plain http");
+  assert.equal(buildBrowserOpen("https://github.com.evil.test/x"), null, "lookalike host");
+  assert.equal(buildBrowserOpen("file:///etc/passwd"), null);
+  assert.equal(buildBrowserOpen("vscode://anthropic.claude-code/open?session=x"), null);
+  assert.equal(buildBrowserOpen("not a url"), null);
 });

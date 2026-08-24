@@ -33,6 +33,10 @@
   --accent: #7dd3fc;
   --claude: #f5b942;
   --codex: #4dd0e1;
+  /* A third source of attention rows, and not an agent: pull requests polled
+     from GitHub, which may or may not be an agent's work. Its own colour so the
+     panel never implies more than it actually knows. */
+  --github: #a78bfa;
   --danger: #f87171;
   /* Red's neighbour, for a failure one step removed (a PR rather than the
      branch you're standing on). */
@@ -340,6 +344,19 @@ button.attention__lead:focus-visible {
   color: var(--codex);
 }
 
+/* A blocked PR is a real failure, but one step removed from the branch you're
+   standing on — the same distinction --danger-pr already draws on the cards. */
+.attention__item--pr-conflict .attention__badge,
+.attention__item--pr-ci-failed .attention__badge {
+  background: rgba(251, 146, 60, 0.16);
+  color: var(--danger-pr);
+}
+
+.attention__item--pr-review .attention__badge {
+  background: rgba(167, 139, 250, 0.16);
+  color: var(--github);
+}
+
 /* The row leads with the project's name, not its path — the path is a tooltip.
    You recognise "central-brain" instantly; /Users/you/code/central-brain is
    twelve words of prefix you already know. */
@@ -372,6 +389,21 @@ button.attention__lead:focus-visible {
 
 .attention__tool--codex {
   color: var(--codex);
+}
+
+.attention__tool--github {
+  color: var(--github);
+}
+
+/* The PR's title, for recognition. Truncates first: the message beside it says
+   what the row actually wants, and that must never be the part that's cut. */
+.attention__pr {
+  color: var(--ink);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 22rem;
 }
 
 .attention__message {
@@ -1550,6 +1582,26 @@ button.activity__text--open:hover {
   display: block;
   font-size: 0.72rem;
   color: var(--muted);
+}
+
+/* The repo list needs a full-width field under its label, not a control tucked
+   to the right of one — the hint below it runs to three lines. */
+.setup__pref--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
+.setup__pref-textarea {
+  width: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.35rem 0.45rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+  resize: vertical;
 }
 
 .setup__pref-select {

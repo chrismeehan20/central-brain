@@ -12,12 +12,31 @@ import { notify, type NotifyOptions } from "./notifier.js";
 import { canonicalize } from "../scan/paths.js";
 import { recordHookEvent, type LivenessStoreLike } from "./hookLiveness.js";
 
-const PRIORITY_BY_TYPE: Record<AttentionType, AttentionPriority> = {
+/** Shared with the pollers, so a row's urgency is a property of its type in one place. */
+export const PRIORITY_BY_TYPE: Record<AttentionType, AttentionPriority> = {
   permission: "high",
   waiting: "medium",
   "codex-maybe-waiting": "low",
+  "pr-conflict": "high",
+  "pr-ci-failed": "high",
+  "pr-review": "medium",
   done: "none",
 };
+
+/**
+ * Types owned by a poller rather than by a hook event.
+ *
+ * The distinction is the whole reason `dismissAttentionItem` has two branches:
+ * a pushed row is edge-triggered, so deleting it sticks until something new
+ * happens, while a polled row is re-derived from the world every pass and
+ * would simply reappear. Snoozing is the only honest way to hide one.
+ */
+const POLLED_TYPES = new Set<AttentionType>([
+  "codex-maybe-waiting",
+  "pr-conflict",
+  "pr-ci-failed",
+  "pr-review",
+]);
 
 // Fires ~every 60s while idle, plus on real permission/blocked states —
 // clearing events mean "user is back", silent events mean "turn finished,
@@ -215,7 +234,10 @@ export async function snoozeAttentionItem(
  * Two mechanics behind one verb, because the two kinds of row are created
  * differently:
  *
- * - `codex-maybe-waiting` is *polled*, not pushed. The staleness pass re-creates
+ * - every polled type (`codex-maybe-waiting`, and the `pr-*` rows derived from
+ *   your open pull requests) is re-derived from the world on every pass, so
+ *   deleting the row only buys you the time until the next one.
+ *   `codex-maybe-waiting` is the original case. The staleness pass re-creates
  *   any missing id for as long as the rollout file stays quiet inside its
  *   5min–1h window, so deleting the row would just resurrect it a minute later.
  *   A 24h snooze is the honest implementation, and 24h is not arbitrary: it
@@ -233,7 +255,7 @@ export async function dismissAttentionItem(
   const item = store.data.items.find((i) => i.id === id);
   if (!item) return false;
 
-  if (item.type === "codex-maybe-waiting") {
+  if (POLLED_TYPES.has(item.type)) {
     return snoozeAttentionItem(id, DISMISS_SNOOZE_MINUTES, deps);
   }
 

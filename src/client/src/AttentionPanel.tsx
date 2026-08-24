@@ -1,15 +1,38 @@
 import { useEffect, useMemo, useState } from "react";
-import type { AttentionItem, AttentionType, Project } from "@shared/types";
-import { dismissAttention, openInVsCode, snoozeAttention } from "./api";
+import type { AttentionItem, AttentionSource, AttentionType, Project } from "@shared/types";
+import { dismissAttention, openInVsCode, openPrUrl, snoozeAttention } from "./api";
 import { relativeTime } from "./format";
 import { useEditorName } from "./prefs";
 
-const ORDER: AttentionType[] = ["permission", "waiting", "codex-maybe-waiting", "done"];
+// Live agents first: a session blocked on a permission prompt is waiting on you
+// right now, where a pull request has been waiting at least fifteen minutes by
+// the time it qualifies. Within the PR rows, hardest blocker first.
+const ORDER: AttentionType[] = [
+  "permission",
+  "waiting",
+  "pr-conflict",
+  "pr-ci-failed",
+  "pr-review",
+  "codex-maybe-waiting",
+  "done",
+];
 const LABEL: Record<AttentionType, string> = {
   permission: "Needs your OK",
   waiting: "Waiting / idle",
   "codex-maybe-waiting": "Codex — maybe stuck (heuristic)",
+  "pr-conflict": "PR — merge conflict",
+  "pr-ci-failed": "PR — CI failing",
+  "pr-review": "PR — over to you",
   done: "Done",
+};
+
+// "GitHub" rather than "Claude" for PR rows even though a cloud session usually
+// authored them: the PR is all we can actually see, and we cannot tell an
+// agent's PR from one you opened by hand.
+const TOOL_LABEL: Record<AttentionSource, string> = {
+  claude: "Claude",
+  codex: "Codex",
+  github: "GitHub",
 };
 
 const SNOOZE_MINUTES = 60;
@@ -67,14 +90,17 @@ export default function AttentionPanel({ projects }: { projects: Project[] }) {
     );
   }
 
-  function openProject(item: AttentionItem) {
+  function openItem(item: AttentionItem) {
     setError(null);
+    // A PR row has no session and possibly no local folder — the work ran in a
+    // container that no longer exists — so the PR itself is what opens.
     // For Claude items the server routes this to the focus-only deep link,
     // landing on the exact chat tab that's waiting (never a resume — the
     // session is live). Codex items just open the project window.
-    openInVsCode(item.projectPath, item.tool === "claude" ? item.sessionId : undefined).catch(
-      (err) => setError(String((err as Error).message ?? err))
-    );
+    const opened = item.pr
+      ? openPrUrl(item.pr.url)
+      : openInVsCode(item.projectPath, item.tool === "claude" ? item.sessionId : undefined);
+    opened.catch((err) => setError(String((err as Error).message ?? err)));
   }
 
   async function mutate(id: string, run: () => Promise<{ items: AttentionItem[] }>) {
@@ -103,30 +129,46 @@ export default function AttentionPanel({ projects }: { projects: Project[] }) {
       <h2 className="attention__title">Needs attention {visible.length}</h2>
       <div className="attention__list">
         {sorted.map((item) => {
+          // A watched repo with no checkout here has no project to name it
+          // after, so the row falls back to the slug it was found under.
+          const name =
+            item.projectPath === "unknown" && item.pr
+              ? item.pr.repo
+              : projectName(item.projectPath);
           const lead = (
             <>
-              <span className="attention__project">{projectName(item.projectPath)}</span>
+              <span className="attention__project">{name}</span>
               <span className={`attention__tool attention__tool--${item.tool}`}>
-                {item.tool === "claude" ? "Claude" : "Codex"}
+                {TOOL_LABEL[item.tool]}
               </span>
               <span className="attention__badge">{LABEL[item.type]}</span>
+              {item.pr && (
+                <span className="attention__pr">
+                  #{item.pr.number} {item.pr.title}
+                </span>
+              )}
               {item.message && <span className="attention__message">{item.message}</span>}
             </>
           );
           // Hook events with no cwd land here as "unknown" — nothing to open,
-          // so the leading region is inert. The controls still apply.
-          const openable = item.projectPath !== "unknown";
+          // so the leading region is inert. The controls still apply. A PR row
+          // is always openable: the link is the point.
+          const openable = Boolean(item.pr) || item.projectPath !== "unknown";
           return (
             <div key={item.id} className={`attention__item attention__item--${item.type}`}>
               {openable ? (
                 <button
                   className="attention__lead"
-                  title={`${
-                    item.tool === "claude"
-                      ? `Jump to this chat in ${editorName} — the agent is waiting there`
-                      : `Open this project in ${editorName} — the agent is waiting there`
-                  }\n${item.projectPath}`}
-                  onClick={() => openProject(item)}
+                  title={
+                    item.pr
+                      ? `Open this pull request on GitHub\n${item.pr.url}`
+                      : `${
+                          item.tool === "claude"
+                            ? `Jump to this chat in ${editorName} — the agent is waiting there`
+                            : `Open this project in ${editorName} — the agent is waiting there`
+                        }\n${item.projectPath}`
+                  }
+                  onClick={() => openItem(item)}
                 >
                   {lead}
                 </button>

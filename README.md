@@ -35,6 +35,18 @@ dashboard, but that path is neither packaged nor supported.)
   events start arriving, the heuristic stands down and clears its guesses.
 - **GitHub status.** Branch, dirty state, ahead/behind, open PRs, and CI
   status per project, via your existing `gh` CLI auth. No new tokens.
+- **Cloud sessions, through their pull requests.** A Claude session running on
+  the web (claude.ai/code, or the desktop app's Code tab) leaves nothing on
+  this machine — no transcript in `~/.claude/projects`, and no way to reach a
+  loopback hook endpoint — so it can never show up here as a session. What it
+  does leave is a pull request, so that is what gets watched: your own open PRs
+  across every repo Central Brain already knows about, plus any extra
+  `owner/repo` you add in ⚙. Merge conflicts, red CI, changes requested, and
+  work that has gone quiet and is now yours to review or merge all become
+  needs-attention rows that open the PR. Read-only, over the same `gh` auth as
+  the rest — no tokens, no inbound network path. A PR only speaks up once it
+  has been quiet for 15 minutes, so this never argues with a session that is
+  still pushing. See `docs/decisions/0005-cloud-sessions.md`.
 - **AI "what's left" summaries.** An optional one-line summary per project
   generated from its docs + recent session activity (Claude Haiku, cached
   and hash-gated so it doesn't re-run until something actually changes).

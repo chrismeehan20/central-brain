@@ -15,6 +15,7 @@ import { hooksSetupRoutes } from "./routes/hooksSetup.js";
 import { startWatcher } from "./watch/watcher.js";
 import { startCodexStalenessPoll } from "./poll/codexStaleness.js";
 import { startGithubPoller } from "./poll/githubPoller.js";
+import { startRemoteWorkPoller } from "./poll/remoteWorkPoller.js";
 import { startSummaryPoller } from "./poll/summaryPoller.js";
 import { startDetailPoller } from "./poll/detailPoller.js";
 import { ensureInstallId, installCodexForwarder, writeRuntimeEndpoint } from "./hooks/forwarder.js";
@@ -95,6 +96,7 @@ app
     startWatcher();
     startCodexStalenessPoll();
     startGithubPoller();
+    startRemoteWorkPoller();
     startSummaryPoller();
     startDetailPoller();
     startSpoolDrain((m) => app.log.info(m));
