@@ -1,6 +1,6 @@
 {
   "name": "central-brain",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "description": "Local mission-control dashboard for tracking many AI-agent-driven projects at once.",
