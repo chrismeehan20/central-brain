@@ -69,6 +69,15 @@ dashboard, but that path is neither packaged nor supported.)
 are all found automatically). Optional: the [`gh` CLI](https://cli.github.com)
 for GitHub status, `terminal-notifier` for nicer notifications.
 
+There is no GitHub account to connect: the app has no OAuth flow and stores no
+token of its own. Install `gh`, run `gh auth login` once in a terminal, and
+that sign-in is what every GitHub feature reads. `gh` is found the same way
+Node is — by absolute path first, because a `.app` launched from Finder does
+not inherit your shell's PATH and would otherwise never see a Homebrew
+install. ⚙ → GitHub reports which binary it resolved and whether it is signed
+in, with a Re-check button so installing `gh` costs a click rather than a
+relaunch.
+
 **Either** install with Homebrew:
 
 ```bash
@@ -258,7 +267,12 @@ as user documentation.
   entirely and drops its guesses, because hooks are authoritative. Reported at
   `GET /api/attention` as `hooks.codex`.
 - **GitHub** (`src/server/github/ghClient.ts`). Shells out to `git` and
-  `gh` per project, degrading silently when either is unavailable.
+  `gh` per project. `gh` is resolved by absolute path
+  (`src/server/github/ghBinary.ts`) rather than by name, and the three states
+  that used to look identical — not installed, installed but signed out,
+  connected — are reported in ⚙ instead of all rendering as an empty panel.
+  Per-project failures past that still degrade quietly: one unreachable repo
+  should not blank the others.
 - **AI summaries** (`src/server/ai/summarize.ts`). Hash-gated: only calls
   the API when a project's docs/sessions actually changed since the last
   summary.
