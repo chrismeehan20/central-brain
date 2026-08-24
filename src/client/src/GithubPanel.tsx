@@ -58,20 +58,35 @@ export default function GithubPanel({ status: initial }: { status: GithubCliStat
         </button>
       </div>
 
+      {/* Commands sit on their own line rather than inline in the prose. Inline
+          they wrapped mid-command and each chip's padding read as a stray space
+          against the punctuation beside it. */}
       {status.state === "missing" && (
-        <p className="ghcli__hint">
-          Install the{" "}
-          <a href={INSTALL_URL} target="_blank" rel="noreferrer">
-            gh CLI
-          </a>{" "}
-          (<code>brew install gh</code>), then <code>gh auth login</code> once in a terminal.
-        </p>
+        <>
+          <p className="ghcli__hint">
+            Install the{" "}
+            <a href={INSTALL_URL} target="_blank" rel="noreferrer">
+              gh CLI
+            </a>{" "}
+            and sign in once. Central Brain reads that sign-in — it never asks for a token
+            of its own.
+          </p>
+          <div className="ghcli__cmds">
+            <code>brew install gh</code>
+            <code>gh auth login</code>
+          </div>
+        </>
       )}
       {status.state === "unauthenticated" && (
-        <p className="ghcli__hint">
-          Run <code>gh auth login</code> once in a terminal, then Re-check. Central Brain reads
-          that sign-in — it never asks for a token of its own.
-        </p>
+        <>
+          <p className="ghcli__hint">
+            Sign in once in a terminal, then Re-check. Central Brain reads that sign-in — it
+            never asks for a token of its own.
+          </p>
+          <div className="ghcli__cmds">
+            <code>gh auth login</code>
+          </div>
+        </>
       )}
       {status.state === "connected" && (
         <p className="ghcli__hint">
@@ -80,9 +95,12 @@ export default function GithubPanel({ status: initial }: { status: GithubCliStat
         </p>
       )}
       {/* The resolved path, because "which gh is it even using" is the first
-          question when a terminal says one thing and the app shows another. */}
+          question when a terminal says one thing and the app shows another.
+          `detail` only earns a line when it says something the state-specific
+          copy above does not — "found it, but it would not run" does; "it isn't
+          installed" is the sentence directly above it. */}
       {status.path && <p className="ghcli__path">{status.path}</p>}
-      {status.detail && status.state !== "connected" && (
+      {status.detail && status.state === "missing" && status.path && (
         <p className="ghcli__path">{status.detail}</p>
       )}
       {error && <p className="setup__error">{error}</p>}

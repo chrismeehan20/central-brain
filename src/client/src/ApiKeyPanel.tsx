@@ -96,9 +96,13 @@ export default function ApiKeyPanel({ mode, settings, onStatusChange, onPreferen
         </p>
       ) : (
         <>
+          {/* Em dash rather than a full stop after the chip: a padded inline
+              chip already carries side padding, so "…TwAA ." reads as a typo
+              while "…TwAA — " reads as intended spacing. */}
           {status.configured && (
             <p className="setup__note setup__note--ok">
-              Key saved, ending <code>…{status.hint}</code>. Paste a new one below to replace it.
+              Key saved, ending <code>…{status.hint}</code> — paste a new one below to
+              replace it.
             </p>
           )}
 

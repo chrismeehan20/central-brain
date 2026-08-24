@@ -1458,12 +1458,17 @@ button.activity__text--open:hover {
   color: var(--accent);
 }
 
+/* Tight side padding, because a padded chip followed by a comma or full stop
+   renders as "…TwAA ." — the chip's own padding reads as a word space. And
+   nowrap, because a command broken across two lines stops being copyable by
+   eye. */
 .setup__hint code,
 .setup__note code {
   background: var(--bg);
   border-radius: 4px;
-  padding: 0.05rem 0.3rem;
+  padding: 0.05rem 0.18rem;
   font-size: 0.74rem;
+  white-space: nowrap;
 }
 
 .setup__error {
@@ -1495,7 +1500,7 @@ button.activity__text--open:hover {
   display: flex;
   align-items: baseline;
   gap: 0.6rem;
-  padding: 0.25rem 0;
+  padding: 0.35rem 0;
   font-size: 0.8rem;
 }
 
@@ -1582,6 +1587,14 @@ button.activity__text--open:hover {
   display: block;
   font-size: 0.72rem;
   color: var(--muted);
+}
+
+/* The UA gives a checkbox its own margin, which stacked on the flex gap and
+   pushed this row a few pixels right of every label beneath it. Left edges in
+   a settings list have to line up or the column reads as broken. */
+.setup__pref input[type="checkbox"] {
+  margin: 0.15rem 0 0;
+  align-self: flex-start;
 }
 
 /* The repo list needs a full-width field under its label, not a control tucked
@@ -1766,11 +1779,23 @@ button.activity__text--open:hover {
   color: var(--muted);
 }
 
-.ghcli__hint code {
-  padding: 0.05rem 0.3rem;
+/* Commands, one per chip, on their own line under the prose. Same shape as
+   .hooks__command — the two panels answer the same question and should not
+   look like two unrelated widgets. */
+.ghcli__cmds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.ghcli__cmds code {
+  padding: 0.1rem 0.35rem;
   border: 1px solid var(--border);
   border-radius: 4px;
+  font-size: 0.74rem;
   color: var(--ink);
+  white-space: nowrap;
 }
 
 /* The resolved binary, and any failure detail. Long absolute paths must wrap
