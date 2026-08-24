@@ -2,7 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { apiKeyStatus, clearApiKey, dismissSetup, saveApiKey } from "../ai/apiKey.js";
 import { AI_MODEL, callsRemaining, dailyCap } from "../ai/budget.js";
 import { getPreferences, settingsDb, updatePreferences, writeSettings } from "../store/db.js";
-import { EDITORS } from "@shared/types.js";
+import { getGhStatus, refreshGhStatus } from "../github/ghBinary.js";
+import { EDITORS, REPO_SLUG_RE } from "@shared/types.js";
 
 interface ApiKeyBody {
   apiKey?: string;
@@ -11,6 +12,26 @@ interface ApiKeyBody {
 interface PreferencesBody {
   notifications?: unknown;
   editor?: unknown;
+  remoteRepos?: unknown;
+}
+
+/**
+ * Every entry has to be a plain `owner/repo`. This is not cosmetic: the values
+ * end up as `gh --repo` arguments, so the check that rejects junk is the same
+ * check that keeps anything shell-shaped out of an argv.
+ */
+function parseRemoteRepos(value: unknown): { repos: string[] } | { error: string } {
+  if (!Array.isArray(value) || value.some((v) => typeof v !== "string")) {
+    return { error: "remoteRepos must be an array of strings" };
+  }
+  const repos: string[] = [];
+  for (const raw of value as string[]) {
+    const slug = raw.trim();
+    if (!slug) continue;
+    if (!REPO_SLUG_RE.test(slug)) return { error: `not a valid owner/repo: ${slug}` };
+    if (!repos.includes(slug)) repos.push(slug);
+  }
+  return { repos };
 }
 
 /**
@@ -33,6 +54,11 @@ export async function settingsRoutes(app: FastifyInstance) {
     ai: { model: AI_MODEL, dailyCap: dailyCap(), callsRemaining: callsRemaining() },
     preferences: getPreferences(),
     ntfy: ntfyStatus(),
+    // Read from the boot-time cache rather than probed per request: this is
+    // polled by the panel, and shelling out to `gh auth status` on every poll
+    // would be a subprocess per second for an answer that changes when the
+    // user installs something.
+    github: getGhStatus(),
   }));
 
   // Phone push. An empty string clears it. Only the URL's shape is validated —
@@ -63,8 +89,17 @@ export async function settingsRoutes(app: FastifyInstance) {
     return { ntfy: ntfyStatus() };
   });
 
+  /**
+   * Re-resolve `gh` and re-check its login.
+   *
+   * Exists so installing `gh` or running `gh auth login` costs a button press
+   * instead of an app restart — the resolved path is cached for the life of the
+   * process, so without this the fix would not take effect until relaunch.
+   */
+  app.post("/api/settings/github/recheck", async () => ({ github: await refreshGhStatus() }));
+
   app.put<{ Body: PreferencesBody }>("/api/settings/preferences", async (req, reply) => {
-    const { notifications, editor } = req.body ?? {};
+    const { notifications, editor, remoteRepos } = req.body ?? {};
     if (notifications !== undefined && typeof notifications !== "boolean") {
       reply.code(400);
       return { error: "notifications must be a boolean" };
@@ -73,9 +108,19 @@ export async function settingsRoutes(app: FastifyInstance) {
       reply.code(400);
       return { error: `editor must be one of: ${Object.keys(EDITORS).join(", ")}` };
     }
+    let parsedRepos: string[] | undefined;
+    if (remoteRepos !== undefined) {
+      const parsed = parseRemoteRepos(remoteRepos);
+      if ("error" in parsed) {
+        reply.code(400);
+        return { error: parsed.error };
+      }
+      parsedRepos = parsed.repos;
+    }
     const preferences = await updatePreferences({
       ...(notifications !== undefined ? { notifications } : {}),
       ...(editor !== undefined ? { editor: editor as keyof typeof EDITORS } : {}),
+      ...(parsedRepos !== undefined ? { remoteRepos: parsedRepos } : {}),
     });
     return { preferences };
   });

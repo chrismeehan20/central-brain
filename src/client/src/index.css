@@ -36,6 +36,12 @@
   --accent: #0b64c8;
   --claude: #a16207;
   --codex: #0e7490;
+  /* A third source of attention rows, and not an agent: pull requests polled
+     from GitHub, which may or may not be an agent's work. Its own colour so the
+     panel never implies more than it actually knows. Violet-700 rather than the
+     dark scheme's #a78bfa: that value is a light violet chosen against #0b0e14
+     and does not hold as text on white. */
+  --github: #6d28d9;
   --danger: #d92d20;
   /* Red's neighbour, for a failure one step removed (a PR rather than the
      branch you're standing on). */
@@ -81,6 +87,7 @@
     --accent: #7dd3fc;
     --claude: #f5b942;
     --codex: #4dd0e1;
+    --github: #a78bfa;
     --danger: #f87171;
     --danger-pr: #fb923c;
     --ok: #4ade80;
@@ -478,6 +485,19 @@ button.attention__lead:focus-visible {
   color: var(--codex);
 }
 
+/* A blocked PR is a real failure, but one step removed from the branch you're
+   standing on — the same distinction --danger-pr already draws on the cards. */
+.attention__item--pr-conflict .attention__badge,
+.attention__item--pr-ci-failed .attention__badge {
+  background: rgba(251, 146, 60, 0.16);
+  color: var(--danger-pr);
+}
+
+.attention__item--pr-review .attention__badge {
+  background: rgba(167, 139, 250, 0.16);
+  color: var(--github);
+}
+
 /* The row leads with the project's name, not its path — the path is a tooltip.
    You recognise "central-brain" instantly; /Users/you/code/central-brain is
    twelve words of prefix you already know. */
@@ -510,6 +530,21 @@ button.attention__lead:focus-visible {
 
 .attention__tool--codex {
   color: var(--codex);
+}
+
+.attention__tool--github {
+  color: var(--github);
+}
+
+/* The PR's title, for recognition. Truncates first: the message beside it says
+   what the row actually wants, and that must never be the part that's cut. */
+.attention__pr {
+  color: var(--ink);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 22rem;
 }
 
 .attention__message {
@@ -1581,12 +1616,17 @@ button.activity__text--open:hover {
   color: var(--accent);
 }
 
+/* Tight side padding, because a padded chip followed by a comma or full stop
+   renders as "…TwAA ." — the chip's own padding reads as a word space. And
+   nowrap, because a command broken across two lines stops being copyable by
+   eye. */
 .setup__hint code,
 .setup__note code {
   background: var(--bg);
   border-radius: 4px;
-  padding: 0.05rem 0.3rem;
+  padding: 0.05rem 0.18rem;
   font-size: 0.74rem;
+  white-space: nowrap;
 }
 
 .setup__error {
@@ -1618,7 +1658,7 @@ button.activity__text--open:hover {
   display: flex;
   align-items: baseline;
   gap: 0.6rem;
-  padding: 0.25rem 0;
+  padding: 0.35rem 0;
   font-size: 0.8rem;
 }
 
@@ -1718,6 +1758,34 @@ button.activity__text--open:hover {
   display: block;
   font-size: 0.72rem;
   color: var(--muted);
+}
+
+/* The UA gives a checkbox its own margin, which stacked on the flex gap and
+   pushed this row a few pixels right of every label beneath it. Left edges in
+   a settings list have to line up or the column reads as broken. */
+.setup__pref input[type="checkbox"] {
+  margin: 0.15rem 0 0;
+  align-self: flex-start;
+}
+
+/* The repo list needs a full-width field under its label, not a control tucked
+   to the right of one — the hint below it runs to three lines. */
+.setup__pref--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
+.setup__pref-textarea {
+  width: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.35rem 0.45rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+  resize: vertical;
 }
 
 .setup__pref-select {
@@ -2841,4 +2909,86 @@ button.activity__text--open:hover {
   flex-shrink: 0;
   color: var(--muted);
   font-size: 0.72rem;
+}
+
+/* GitHub CLI status, in the ⚙ panel under Connected tools. Deliberately shaped
+   like .hooks__row: both answer the same question — is this integration
+   actually working — and they should not look like two unrelated widgets. */
+.ghcli {
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border);
+}
+
+.ghcli__row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+}
+
+.ghcli__name {
+  flex-shrink: 0;
+  min-width: 6.5rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ghcli__state {
+  flex: 1;
+  line-height: 1.45;
+}
+
+.ghcli__state--ok {
+  color: var(--accent);
+}
+
+.ghcli__state--warn {
+  color: var(--claude);
+}
+
+.ghcli__state--muted {
+  color: var(--muted);
+}
+
+.ghcli__recheck {
+  flex-shrink: 0;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.7rem;
+}
+
+.ghcli__hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* Commands, one per chip, on their own line under the prose. Same shape as
+   .hooks__command — the two panels answer the same question and should not
+   look like two unrelated widgets. */
+.ghcli__cmds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.ghcli__cmds code {
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.74rem;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* The resolved binary, and any failure detail. Long absolute paths must wrap
+   rather than widen the settings panel. */
+.ghcli__path {
+  margin: 0.3rem 0 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.85;
+  overflow-wrap: anywhere;
 }

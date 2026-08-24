@@ -3,6 +3,7 @@ import type { ApiKeyStatus, EditorId, Preferences, SettingsResponse } from "@sha
 import { EDITORS } from "@shared/types";
 import { clearApiKey, dismissApiKeySetup, saveApiKey, saveNtfyUrl, updatePreferences } from "./api";
 import HooksPanel from "./HooksPanel";
+import GithubPanel from "./GithubPanel";
 
 /**
  * Anthropic API key setup, in two guises.
@@ -48,6 +49,9 @@ export default function ApiKeyPanel({ mode, settings, onStatusChange, onPreferen
       setPrefsError((err as Error).message ?? String(err));
     }
   }
+  // Edited as free text and saved on blur: one PUT per edit session rather than
+  // one per keystroke, and a half-typed "owner/" never reaches the validator.
+  const [reposDraft, setReposDraft] = useState(() => preferences.remoteRepos.join("\n"));
 
   async function applyPreferences(patch: Partial<Preferences>) {
     setPrefsError(null);
@@ -107,9 +111,13 @@ export default function ApiKeyPanel({ mode, settings, onStatusChange, onPreferen
         </p>
       ) : (
         <>
+          {/* Em dash rather than a full stop after the chip: a padded inline
+              chip already carries side padding, so "…TwAA ." reads as a typo
+              while "…TwAA — " reads as intended spacing. */}
           {status.configured && (
             <p className="setup__note setup__note--ok">
-              Key saved, ending <code>…{status.hint}</code>. Paste a new one below to replace it.
+              Key saved, ending <code>…{status.hint}</code> — paste a new one below to
+              replace it.
             </p>
           )}
 
@@ -153,6 +161,7 @@ export default function ApiKeyPanel({ mode, settings, onStatusChange, onPreferen
       {saved && !error && <p className="setup__ok">Key verified and saved. AI features are on.</p>}
 
       {mode === "settings" && <HooksPanel mode="settings" />}
+      {mode === "settings" && <GithubPanel status={settings.github} />}
 
       {/* Preferences live behind the gear only — onboarding stays a single ask. */}
       {mode === "settings" && (
@@ -215,6 +224,32 @@ export default function ApiKeyPanel({ mode, settings, onStatusChange, onPreferen
                 {ntfySaved ? "Saved" : "Save"}
               </button>
             </span>
+          </label>
+          <label className="setup__pref setup__pref--stacked">
+            <span>
+              Also watch these repos
+              <span className="setup__pref-hint">
+                One <code>owner/repo</code> per line. Repos you have checked out here are
+                watched already — this is for work that only exists in the cloud, like a
+                Claude session on the web that opened a PR in a repo you have never cloned.
+              </span>
+            </span>
+            <textarea
+              className="setup__pref-textarea"
+              rows={3}
+              spellCheck={false}
+              placeholder="chrismeehan20/belfry"
+              value={reposDraft}
+              onChange={(e) => setReposDraft(e.target.value)}
+              onBlur={() =>
+                applyPreferences({
+                  remoteRepos: reposDraft
+                    .split(/[\s,]+/)
+                    .map((r) => r.trim())
+                    .filter(Boolean),
+                })
+              }
+            />
           </label>
           {prefsError && <p className="setup__error">{prefsError}</p>}
         </div>

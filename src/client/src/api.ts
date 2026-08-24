@@ -11,6 +11,7 @@ import type {
   DailyDigest,
   ApiKeyStatus,
   HooksSetupStatus,
+  GithubCliStatus,
   Preferences,
   SettingsResponse,
   MissingProjectTriage,
@@ -74,6 +75,19 @@ export async function relocateProject(
  * (Claude Code panel / Terminal); `note` carries an informational message for
  * routes that can't do that (e.g. Codex).
  */
+/** Open a pull request in the browser. Server-side allowlisted to github.com. */
+export async function openPrUrl(url: string): Promise<void> {
+  const res = await fetch("/api/open/url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Failed to open: ${res.status}`);
+  }
+}
+
 export async function openInVsCode(
   projectPath: string,
   sessionId?: string
@@ -364,4 +378,17 @@ export function clearApiKey(): Promise<ApiKeyStatus> {
 
 export function dismissApiKeySetup(): Promise<ApiKeyStatus> {
   return apiKeyRequest("/api/settings/dismiss-setup", "POST");
+}
+
+/**
+ * Re-resolve `gh` and re-check its login.
+ *
+ * The server caches the resolved path for the life of the process, so this is
+ * what makes "install gh, then click Re-check" work without relaunching.
+ */
+export async function recheckGithubCli(): Promise<GithubCliStatus> {
+  const res = await fetch("/api/settings/github/recheck", { method: "POST" });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Request failed: ${res.status}`);
+  return body.github;
 }

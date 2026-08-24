@@ -279,20 +279,47 @@ export type AttentionType =
   | "permission"
   | "waiting"
   | "codex-maybe-waiting"
+  | "pr-conflict"
+  | "pr-ci-failed"
+  | "pr-review"
   | "done";
+
+/**
+ * Where an attention row came from. The two agent tools *push* their rows via
+ * hooks; `"github"` rows are *polled* from your own open pull requests, which
+ * is the only trace a Claude session running in the cloud (claude.ai/code, or
+ * the desktop app driving a remote container) leaves on this machine — it
+ * writes no local transcript and cannot reach a loopback hook endpoint.
+ * See poll/remoteWorkPoller.ts.
+ */
+export type AttentionSource = SourceTool | "github";
+
+/** The pull request behind a `pr-*` attention row. */
+export interface AttentionPr {
+  repo: string; // "owner/name"
+  number: number;
+  title: string;
+  url: string;
+  branch?: string;
+  isDraft: boolean;
+}
 
 export type AttentionPriority = "high" | "medium" | "low" | "none";
 
 export interface AttentionItem {
   id: string; // sessionId, or sessionId+type for uniqueness
+  /** Synthetic (`pr:<owner/repo>#<number>`) for polled GitHub rows, which have no session. */
   sessionId: string;
+  /** `"unknown"` when nothing local maps to it — a hook event with no cwd, or a PR in a repo with no checkout here. */
   projectPath: string;
-  tool: SourceTool;
+  tool: AttentionSource;
   type: AttentionType;
   priority: AttentionPriority;
   message?: string;
   createdAt: string;
   updatedAt: string;
+  /** Set on `pr-*` rows only: what to open, and what to call it when no project matches. */
+  pr?: AttentionPr;
   /**
    * ISO instant until which this item is hidden from the panel. The item keeps
    * living its normal lifecycle underneath — hook events still clear it, the
@@ -395,12 +422,45 @@ export interface Preferences {
   notifications: boolean;
   /** Which editor doc links and the open route target. */
   editor: EditorId;
+  /**
+   * Extra `owner/repo` slugs to watch for your open PRs, on top of every
+   * GitHub repo already discovered from a project's `origin` remote. This list
+   * is the *only* way a repo you have never checked out here can be watched:
+   * project discovery is session-derived, so a repo you only ever touch from
+   * claude.ai/code never becomes a card on its own.
+   */
+  remoteRepos: string[];
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
   notifications: true,
   editor: DEFAULT_EDITOR,
+  remoteRepos: [],
 };
+
+/** `owner/repo`, the only shape `gh --repo` accepts. Anchored: this reaches a subprocess argument. */
+export const REPO_SLUG_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+
+/**
+ * What the GitHub half of the app can do right now.
+ *
+ * `"unknown"` is the pre-boot value only — every other state is a real answer
+ * from `inspectGhCli()`. The distinction that matters is `missing` vs
+ * `unauthenticated`: one is "install gh", the other is "run gh auth login",
+ * and before this existed both rendered as an empty panel.
+ */
+export type GithubCliState = "unknown" | "missing" | "unauthenticated" | "connected";
+
+export interface GithubCliStatus {
+  state: GithubCliState;
+  /** Absolute path we resolved, when we found one — the answer to "which gh is it even using". */
+  path?: string;
+  /** GitHub account `gh` is signed in as. Best-effort: absent offline, or on a gh too old for `--jq`. */
+  login?: string;
+  checkedAt?: string;
+  /** Human-readable cause, shown verbatim in the ⚙ panel. */
+  detail?: string;
+}
 
 export interface SettingsResponse {
   apiKey: ApiKeyStatus;
@@ -408,6 +468,7 @@ export interface SettingsResponse {
   preferences: Preferences;
   /** Phone push via ntfy. The URL is user-entered config, not a secret — it round-trips so the field can be edited. */
   ntfy: { configured: boolean; url: string | null };
+  github: GithubCliStatus;
 }
 
 /**

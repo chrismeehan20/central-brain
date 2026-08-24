@@ -146,6 +146,7 @@ export function getPreferences(): Preferences {
   return {
     notifications: stored.notifications ?? DEFAULT_PREFERENCES.notifications,
     editor,
+    remoteRepos: Array.isArray(stored.remoteRepos) ? stored.remoteRepos : DEFAULT_PREFERENCES.remoteRepos,
   };
 }
 
