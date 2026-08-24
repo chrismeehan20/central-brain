@@ -38,6 +38,7 @@
      panel never implies more than it actually knows. */
   --github: #a78bfa;
   --danger: #f87171;
+  --ok: #4ade80;
   /* Red's neighbour, for a failure one step removed (a PR rather than the
      branch you're standing on). */
   --danger-pr: #fb923c;
@@ -1806,4 +1807,168 @@ button.activity__text--open:hover {
   color: var(--muted);
   opacity: 0.85;
   overflow-wrap: anywhere;
+}
+
+/* ---- Consolidated views ----------------------------------------------- */
+
+/* The board's top-level lens. Same position/rhythm as the chips row, but the
+   tabs are a step louder than chips: they change what the page IS, not just
+   which cards show. */
+.viewswitch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: -1.25rem 0 1rem;
+}
+
+.viewswitch__tab {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.3rem 0.75rem;
+}
+
+.viewswitch__tab:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.viewswitch__tab--on {
+  background: var(--surface);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* When the chips row follows the switcher it should tuck under it, not
+   restart the topbar's negative-margin dance. */
+.viewswitch + .chips {
+  margin-top: 0;
+}
+
+/* Shared row list for the consolidated views — the attention panel's row
+   rhythm, without its card chrome. */
+.xlist {
+  display: flex;
+  flex-direction: column;
+}
+
+.xlist__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.2rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 0.84rem;
+}
+
+.xlist__row:last-child {
+  border-bottom: none;
+}
+
+.xlist__lead {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex: 1;
+  /* min-width:0 so the title span's ellipsis can engage (flex items refuse to
+     shrink below content otherwise). */
+  min-width: 0;
+}
+
+button.xlist__lead {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+button.xlist__lead:hover .xlist__text {
+  text-decoration: underline;
+}
+
+.xlist__repo {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 0.76rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.xlist__text {
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xlist__tag {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 0.05rem 0.4rem;
+  white-space: nowrap;
+}
+
+.xlist__tag--attention {
+  color: var(--danger-pr);
+  border-color: var(--danger-pr);
+}
+
+.xlist__tag--ci-failure {
+  color: var(--danger-pr);
+  border-color: var(--danger-pr);
+}
+
+.xlist__tag--ci-pending {
+  color: var(--muted);
+}
+
+.xlist__tag--ci-success {
+  color: var(--ok);
+  border-color: rgba(74, 222, 128, 0.4);
+}
+
+.xlist__project {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.78rem;
+  color: var(--accent);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.xlist__project:hover {
+  text-decoration: underline;
+}
+
+/* Activity rows lead with the project name instead of ending with it. */
+.xlist__project--lead {
+  min-width: 7rem;
+  text-align: left;
+}
+
+.xlist__age {
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.xlist__empty {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.section__count {
+  color: var(--accent);
+  font-size: 0.85rem;
 }
