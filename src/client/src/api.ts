@@ -70,6 +70,19 @@ export async function relocateProject(
  * (Claude Code panel / Terminal); `note` carries an informational message for
  * routes that can't do that (e.g. Codex).
  */
+/** Open a pull request in the browser. Server-side allowlisted to github.com. */
+export async function openPrUrl(url: string): Promise<void> {
+  const res = await fetch("/api/open/url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Failed to open: ${res.status}`);
+  }
+}
+
 export async function openInVsCode(
   projectPath: string,
   sessionId?: string

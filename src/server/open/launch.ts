@@ -25,7 +25,7 @@ export interface Cmd {
   args: string[];
 }
 
-export type OpenKind = "project" | "vscode-chat" | "terminal-resume";
+export type OpenKind = "project" | "vscode-chat" | "terminal-resume" | "browser";
 
 export type OpenAction =
   | { error: { status: number; message: string } }
@@ -50,6 +50,26 @@ export function buildChatDeepLink(sessionId: string, editor: EditorId = DEFAULT_
     cmd: "open",
     args: [`${EDITORS[editor].scheme}://anthropic.claude-code/open?session=${sessionId}`],
   };
+}
+
+/**
+ * Open a GitHub URL in the default browser, or null if it isn't one.
+ *
+ * The attention panel's `pr-*` rows point at a pull request, not a folder, so
+ * they need a different verb from every other row. The allowlist is narrow on
+ * purpose: this hands a string to `open(1)`, which will launch a registered
+ * handler for whatever scheme it is given, and the only URLs this app has any
+ * business opening are the PR links it derived itself.
+ */
+export function buildBrowserOpen(url: string): Cmd | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:" || parsed.hostname !== "github.com") return null;
+  return { cmd: "open", args: [parsed.toString()] };
 }
 
 export function buildTerminalResume(cwd: string, sessionId: string): Cmd {

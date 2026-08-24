@@ -33,6 +33,9 @@ export default function ApiKeyPanel({ mode, settings, onStatusChange, onPreferen
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [prefsError, setPrefsError] = useState<string | null>(null);
+  // Edited as free text and saved on blur: one PUT per edit session rather than
+  // one per keystroke, and a half-typed "owner/" never reaches the validator.
+  const [reposDraft, setReposDraft] = useState(() => preferences.remoteRepos.join("\n"));
 
   async function applyPreferences(patch: Partial<Preferences>) {
     setPrefsError(null);
@@ -171,6 +174,32 @@ export default function ApiKeyPanel({ mode, settings, onStatusChange, onPreferen
                 </option>
               ))}
             </select>
+          </label>
+          <label className="setup__pref setup__pref--stacked">
+            <span>
+              Also watch these repos
+              <span className="setup__pref-hint">
+                One <code>owner/repo</code> per line. Repos you have checked out here are
+                watched already — this is for work that only exists in the cloud, like a
+                Claude session on the web that opened a PR in a repo you have never cloned.
+              </span>
+            </span>
+            <textarea
+              className="setup__pref-textarea"
+              rows={3}
+              spellCheck={false}
+              placeholder="chrismeehan20/belfry"
+              value={reposDraft}
+              onChange={(e) => setReposDraft(e.target.value)}
+              onBlur={() =>
+                applyPreferences({
+                  remoteRepos: reposDraft
+                    .split(/[\s,]+/)
+                    .map((r) => r.trim())
+                    .filter(Boolean),
+                })
+              }
+            />
           </label>
           {prefsError && <p className="setup__error">{prefsError}</p>}
         </div>
