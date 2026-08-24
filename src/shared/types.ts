@@ -350,10 +350,32 @@ export const DEFAULT_PREFERENCES: Preferences = {
 /** `owner/repo`, the only shape `gh --repo` accepts. Anchored: this reaches a subprocess argument. */
 export const REPO_SLUG_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 
+/**
+ * What the GitHub half of the app can do right now.
+ *
+ * `"unknown"` is the pre-boot value only — every other state is a real answer
+ * from `inspectGhCli()`. The distinction that matters is `missing` vs
+ * `unauthenticated`: one is "install gh", the other is "run gh auth login",
+ * and before this existed both rendered as an empty panel.
+ */
+export type GithubCliState = "unknown" | "missing" | "unauthenticated" | "connected";
+
+export interface GithubCliStatus {
+  state: GithubCliState;
+  /** Absolute path we resolved, when we found one — the answer to "which gh is it even using". */
+  path?: string;
+  /** GitHub account `gh` is signed in as. Best-effort: absent offline, or on a gh too old for `--jq`. */
+  login?: string;
+  checkedAt?: string;
+  /** Human-readable cause, shown verbatim in the ⚙ panel. */
+  detail?: string;
+}
+
 export interface SettingsResponse {
   apiKey: ApiKeyStatus;
   ai: { model: string; dailyCap: number; callsRemaining: number };
   preferences: Preferences;
+  github: GithubCliStatus;
 }
 
 /**

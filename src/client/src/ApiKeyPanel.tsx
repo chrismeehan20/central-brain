@@ -3,6 +3,7 @@ import type { ApiKeyStatus, EditorId, Preferences, SettingsResponse } from "@sha
 import { EDITORS } from "@shared/types";
 import { clearApiKey, dismissApiKeySetup, saveApiKey, updatePreferences } from "./api";
 import HooksPanel from "./HooksPanel";
+import GithubPanel from "./GithubPanel";
 
 /**
  * Anthropic API key setup, in two guises.
@@ -141,6 +142,7 @@ export default function ApiKeyPanel({ mode, settings, onStatusChange, onPreferen
       {saved && !error && <p className="setup__ok">Key verified and saved. AI features are on.</p>}
 
       {mode === "settings" && <HooksPanel mode="settings" />}
+      {mode === "settings" && <GithubPanel status={settings.github} />}
 
       {/* Preferences live behind the gear only — onboarding stays a single ask. */}
       {mode === "settings" && (

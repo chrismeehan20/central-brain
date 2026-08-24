@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import type { AttentionPr, AttentionType, Project } from "@shared/types.js";
 import { REPO_SLUG_RE } from "@shared/types.js";
 import { aggregateCheckRollup, type CiClass } from "./ghClient.js";
+import { ghPath } from "./ghBinary.js";
 import { normalizeRemoteUrl, originUrlFromConfig } from "../scan/repoIdentity.js";
 
 const execFileAsync = promisify(execFile);
@@ -196,7 +197,13 @@ export function resolveWatchedRepos(
 export type ExecLike = (cmd: string, args: string[]) => Promise<string>;
 
 const defaultExec: ExecLike = async (cmd, args) => {
-  const { stdout } = await execFileAsync(cmd, args, { timeout: TIMEOUT_MS, cwd: os.homedir() });
+  // `cmd` is the name to run; the absolute path comes from ghBinary, because a
+  // Finder-launched app's PATH does not contain Homebrew. Throwing when it
+  // cannot be resolved is deliberate — the poller treats a throw as "couldn't
+  // ask" and keeps existing rows, which is the honest reading of a missing CLI.
+  const bin = cmd === "gh" ? ghPath() : cmd;
+  if (!bin) throw new Error("gh CLI not found");
+  const { stdout } = await execFileAsync(bin, args, { timeout: TIMEOUT_MS, cwd: os.homedir() });
   return stdout.trim();
 };
 

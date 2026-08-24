@@ -8,6 +8,7 @@ import type {
   DailyDigest,
   ApiKeyStatus,
   HooksSetupStatus,
+  GithubCliStatus,
   Preferences,
   SettingsResponse,
   MissingProjectTriage,
@@ -277,4 +278,17 @@ export function clearApiKey(): Promise<ApiKeyStatus> {
 
 export function dismissApiKeySetup(): Promise<ApiKeyStatus> {
   return apiKeyRequest("/api/settings/dismiss-setup", "POST");
+}
+
+/**
+ * Re-resolve `gh` and re-check its login.
+ *
+ * The server caches the resolved path for the life of the process, so this is
+ * what makes "install gh, then click Re-check" work without relaunching.
+ */
+export async function recheckGithubCli(): Promise<GithubCliStatus> {
+  const res = await fetch("/api/settings/github/recheck", { method: "POST" });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Request failed: ${res.status}`);
+  return body.github;
 }

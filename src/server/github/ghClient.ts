@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
 import type { GithubStatus } from "@shared/types.js";
+import { ghPath } from "./ghBinary.js";
 
 const execFileAsync = promisify(execFile);
 const TIMEOUT_MS = 8000;
@@ -182,9 +183,19 @@ export async function fetchGithubStatus(projectPath: string): Promise<GithubStat
     // no upstream configured
   }
 
+  // Everything below shells out to `gh`, which the packaged app cannot find on
+  // PATH — see github/ghBinary.ts. Resolving it here (rather than trusting the
+  // name) is the difference between a populated panel and a silently empty one
+  // on every install that isn't a developer machine.
+  const gh = ghPath();
+  if (!gh) {
+    status.unavailableReason = "gh CLI not found — install it, or check ⚙ → GitHub";
+    return status;
+  }
+
   try {
     const prJson = await run(
-      "gh",
+      gh,
       ["pr", "list", "--json", "number,title,state,isDraft,statusCheckRollup", "--limit", "20"],
       projectPath
     );
@@ -209,7 +220,7 @@ export async function fetchGithubStatus(projectPath: string): Promise<GithubStat
       // 20 covers the branch's recent history across every workflow; the
       // aggregation keeps only the newest run per workflow anyway.
       const runJson = await run(
-        "gh",
+        gh,
         [
           "run",
           "list",

@@ -1712,3 +1712,73 @@ button.activity__text--open:hover {
     scroll-behavior: auto !important;
   }
 }
+
+/* GitHub CLI status, in the ⚙ panel under Connected tools. Deliberately shaped
+   like .hooks__row: both answer the same question — is this integration
+   actually working — and they should not look like two unrelated widgets. */
+.ghcli {
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border);
+}
+
+.ghcli__row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+}
+
+.ghcli__name {
+  flex-shrink: 0;
+  min-width: 6.5rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ghcli__state {
+  flex: 1;
+  line-height: 1.45;
+}
+
+.ghcli__state--ok {
+  color: var(--accent);
+}
+
+.ghcli__state--warn {
+  color: var(--claude);
+}
+
+.ghcli__state--muted {
+  color: var(--muted);
+}
+
+.ghcli__recheck {
+  flex-shrink: 0;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.7rem;
+}
+
+.ghcli__hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.ghcli__hint code {
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--ink);
+}
+
+/* The resolved binary, and any failure detail. Long absolute paths must wrap
+   rather than widen the settings panel. */
+.ghcli__path {
+  margin: 0.3rem 0 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}

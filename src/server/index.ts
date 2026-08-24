@@ -20,6 +20,7 @@ import { startSummaryPoller } from "./poll/summaryPoller.js";
 import { startDetailPoller } from "./poll/detailPoller.js";
 import { ensureInstallId, installCodexForwarder, writeRuntimeEndpoint } from "./hooks/forwarder.js";
 import { startSpoolDrain } from "./poll/spoolDrain.js";
+import { refreshGhStatus } from "./github/ghBinary.js";
 
 const PORT = Number(process.env.PORT ?? 4317);
 const SCAN_INTERVAL_MS = 3 * 60 * 1000;
@@ -91,6 +92,16 @@ app
     app.log.info(`central-brain client dir: ${clientDist}`);
     app.log.info(`central-brain parent watchdog: ${watchingParent ? "armed" : "off"}`);
     publishHookRuntime();
+    // Resolved once at boot and logged: "which gh, and is it signed in" is the
+    // first thing to check when the GitHub panels are empty, and the log is the
+    // only place a packaged app can say it.
+    refreshGhStatus()
+      .then((gh) => {
+        app.log.info(
+          `central-brain gh: ${gh.state}${gh.path ? ` (${gh.path})` : ""}${gh.login ? ` as @${gh.login}` : ""}`,
+        );
+      })
+      .catch((err) => app.log.warn({ err }, "gh inspection failed"));
     runScan();
     setInterval(runScan, SCAN_INTERVAL_MS);
     startWatcher();

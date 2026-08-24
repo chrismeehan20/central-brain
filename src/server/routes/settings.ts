@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { apiKeyStatus, clearApiKey, dismissSetup, saveApiKey } from "../ai/apiKey.js";
 import { AI_MODEL, callsRemaining, dailyCap } from "../ai/budget.js";
 import { getPreferences, updatePreferences } from "../store/db.js";
+import { getGhStatus, refreshGhStatus } from "../github/ghBinary.js";
 import { EDITORS, REPO_SLUG_RE } from "@shared/types.js";
 
 interface ApiKeyBody {
@@ -47,7 +48,21 @@ export async function settingsRoutes(app: FastifyInstance) {
     apiKey: apiKeyStatus(),
     ai: { model: AI_MODEL, dailyCap: dailyCap(), callsRemaining: callsRemaining() },
     preferences: getPreferences(),
+    // Read from the boot-time cache rather than probed per request: this is
+    // polled by the panel, and shelling out to `gh auth status` on every poll
+    // would be a subprocess per second for an answer that changes when the
+    // user installs something.
+    github: getGhStatus(),
   }));
+
+  /**
+   * Re-resolve `gh` and re-check its login.
+   *
+   * Exists so installing `gh` or running `gh auth login` costs a button press
+   * instead of an app restart — the resolved path is cached for the life of the
+   * process, so without this the fix would not take effect until relaunch.
+   */
+  app.post("/api/settings/github/recheck", async () => ({ github: await refreshGhStatus() }));
 
   app.put<{ Body: PreferencesBody }>("/api/settings/preferences", async (req, reply) => {
     const { notifications, editor, remoteRepos } = req.body ?? {};
