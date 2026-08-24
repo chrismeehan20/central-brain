@@ -3,7 +3,8 @@ import { apiKeyStatus, clearApiKey, dismissSetup, saveApiKey } from "../ai/apiKe
 import { AI_MODEL, callsRemaining, dailyCap } from "../ai/budget.js";
 import { getPreferences, updatePreferences } from "../store/db.js";
 import { getGhStatus, refreshGhStatus } from "../github/ghBinary.js";
-import { EDITORS, REPO_SLUG_RE } from "@shared/types.js";
+import { DASHBOARD_VIEWS, EDITORS, REPO_SLUG_RE } from "@shared/types.js";
+import type { DashboardView } from "@shared/types.js";
 
 interface ApiKeyBody {
   apiKey?: string;
@@ -13,6 +14,7 @@ interface PreferencesBody {
   notifications?: unknown;
   editor?: unknown;
   remoteRepos?: unknown;
+  dashboardView?: unknown;
 }
 
 /**
@@ -65,7 +67,7 @@ export async function settingsRoutes(app: FastifyInstance) {
   app.post("/api/settings/github/recheck", async () => ({ github: await refreshGhStatus() }));
 
   app.put<{ Body: PreferencesBody }>("/api/settings/preferences", async (req, reply) => {
-    const { notifications, editor, remoteRepos } = req.body ?? {};
+    const { notifications, editor, remoteRepos, dashboardView } = req.body ?? {};
     if (notifications !== undefined && typeof notifications !== "boolean") {
       reply.code(400);
       return { error: "notifications must be a boolean" };
@@ -83,10 +85,18 @@ export async function settingsRoutes(app: FastifyInstance) {
       }
       parsedRepos = parsed.repos;
     }
+    if (
+      dashboardView !== undefined &&
+      !DASHBOARD_VIEWS.includes(dashboardView as DashboardView)
+    ) {
+      reply.code(400);
+      return { error: `dashboardView must be one of: ${DASHBOARD_VIEWS.join(", ")}` };
+    }
     const preferences = await updatePreferences({
       ...(notifications !== undefined ? { notifications } : {}),
       ...(editor !== undefined ? { editor: editor as keyof typeof EDITORS } : {}),
       ...(parsedRepos !== undefined ? { remoteRepos: parsedRepos } : {}),
+      ...(dashboardView !== undefined ? { dashboardView: dashboardView as DashboardView } : {}),
     });
     return { preferences };
   });
