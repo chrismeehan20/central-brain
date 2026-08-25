@@ -33,6 +33,42 @@ dashboard, but that path is neither packaged nor supported.)
   that happens a rollout file that stops growing mid-session is flagged as
   "maybe waiting," clearly labeled as a heuristic. Once real Codex hook
   events start arriving, the heuristic stands down and clears its guesses.
+- **Mission Control board.** A cross-project kanban (`#/board` in the
+  sidebar): four fixed lanes — Inbox, Up next, In progress, Done — with
+  drag-and-drop cards you own. Link a card to a project and it shows that
+  project's live agent state (agent active / waiting on you), derived at
+  render time from sessions and alerts, so a card never goes stale when an
+  agent finishes without telling anyone. A fleet strip on top shows every
+  non-idle agent; clicking a chip jumps to the exact chat that's moving (or
+  stuck).
+- **Start an agent from a card.** A linked card's editor has a **Start
+  agent** button: it opens a Terminal running Claude Code seeded with the
+  card's title and notes, moves the card to In progress, and records where
+  the agent ran. Tick *in a fresh worktree* and the card first gets its own
+  checkout (`<repo>-agents/<slug>`, branch `agent/<slug>`), so parallel
+  cards never fight over one working tree — the scanner folds the new
+  worktree into the project's card automatically. The session is a normal
+  interactive one, with all of Claude Code's own permission prompts; only
+  paths the scanner itself discovered can ever be dispatched to. Its brief
+  ends by asking the agent to land its work and update the board over MCP,
+  which closes the loop: plan on the board, run from the board, done on the
+  board.
+- **Agents roster.** Every Claude and Codex session across your projects
+  (`#/agents`), waiting-on-you first, then active (moved in the last 10
+  minutes), then the rest of the last 48 hours — with branch, model, and
+  token counts where Codex reports them, and one-click open/resume.
+- **Activity stream.** The live hook-event feed (`#/activity`): what the
+  fleet has been doing, newest first, pushed over the same SSE stream the
+  alerts ride and kept as a rolling window. Metadata only — event names and
+  tool names, never prompts or tool inputs.
+- **Skill mining.** Once a week (needs the Anthropic key), Central Brain
+  reads the opening prompts and summaries of your last month of sessions —
+  metadata it already holds, no transcripts opened — and asks: what do you
+  keep doing by hand that deserves to be a reusable skill? Each finding
+  lands as a "Skill idea:" card in the board's inbox with the evidence and
+  a suggested outline; you decide what becomes real. Deduped, hash-gated
+  so a quiet week costs nothing, and runnable on demand via
+  `POST /api/skill-miner/run`.
 - **GitHub status.** Branch, dirty state, ahead/behind, open PRs, and CI
   status per project, via your existing `gh` CLI auth. No new tokens.
 - **Cloud sessions, through their pull requests.** A Claude session running on
@@ -170,6 +206,98 @@ back, so a restart or an upgrade doesn't silently eat them.
 
 To remove them: `npm run uninstall-codex-hooks`.
 
+### From your phone
+
+The dashboard works from a phone — see which agents need you from the
+couch, move board cards, snooze alerts — but **do it through Tailscale, not
+by exposing the port.** The server binds `127.0.0.1` only and its API is
+deliberately unauthenticated (it trusts the machine boundary — `/api/open`
+launches apps on your Mac), so a port-forward or public tunnel would hand
+anyone on the internet a remote control for your computer. Tailscale keeps
+the machine boundary and stretches it to your own devices: only hardware
+signed into your tailnet can reach the server at all, and traffic is
+end-to-end encrypted WireGuard.
+
+1. Install [Tailscale](https://tailscale.com/download) on the Mac and the
+   phone, signed into the same tailnet (the free plan covers this).
+2. On the Mac:
+
+   ```bash
+   tailscale serve --bg 4317
+   ```
+
+   Tailscale proxies `https://<your-mac>.<tailnet>.ts.net` to
+   `localhost:4317` with a real HTTPS certificate. No config changes here;
+   the server keeps listening on loopback only, exactly as before.
+3. Open that URL on the phone and **Add to Home Screen** — the dashboard
+   installs as a standalone full-screen app with its own icon (there's a
+   web manifest for exactly this). Live alerts stream in over the same SSE
+   connection the desktop uses.
+
+`tailscale serve status` shows what's exposed; `tailscale serve reset`
+turns it off. If you ever see a "funnel" flag in examples, don't use it
+here — Funnel publishes to the open internet, which is precisely what this
+API must never be.
+
+#### Ask Siri
+
+`GET /api/brief` returns the fleet state as plain spoken English — blocked
+agents first, with reasons, then who's working, the estimated Claude-window
+reset, and what's up next on the board. Two Shortcuts make it yours (both
+work from the phone over Tailscale, no OS beta required):
+
+- **"Code status"**: Shortcuts → new shortcut → *Get Contents of URL*
+  (`https://<your-mac>.<tailnet>.ts.net/api/brief`) → *Speak Text*. Name it
+  "Code status" and "Hey Siri, code status" reads your fleet aloud.
+- **"Add to my build list"**: *Ask for Input* (text) → *Get Contents of URL*
+  with method POST to `/api/board/card`, request body JSON
+  `{"title": <Provided Input>}` — dictate a card into the Inbox from
+  anywhere. (The same trick works from an Apple Reminders automation if you
+  prefer capturing there: a personal automation can forward new reminders
+  from a chosen list into the board.)
+- **"Ask my brain"**: *Ask for Input* → POST to `/api/ask` with body
+  `{"question": <Provided Input>}` → *Speak Text*. Free-form questions
+  answered from the dashboard's own state — fleet, board, project
+  summaries, CI, recent events — via one budgeted AI call (needs the
+  Anthropic key). Deliberately closed-book: it answers from what Central
+  Brain already knows or says it doesn't have it, so replies are fast and
+  never invented.
+
+`/api/brief?format=json` returns the same text plus raw counts, for
+Shortcuts that should stay silent when nothing needs you.
+
+#### Push alerts to the phone
+
+The ⚙ settings panel has a **Phone push (ntfy)** field: paste an
+[ntfy](https://ntfy.sh) topic URL (or a self-hosted instance) and every
+needs-attention alert also lands on your phone through the ntfy app, with
+the same content rule as everywhere else — project and event kind, never
+prompt text. Anyone who knows a public topic's name can subscribe to it, so
+use a long random topic (or self-host); the desktop mute switch silences
+phone push too.
+
+### Let your agents use the brain (MCP)
+
+Central Brain ships an MCP server, so any Claude Code session on the machine
+can read and write the same state the dashboard shows: ask "what's waiting on
+me across every project?", pull another repo's summary and open to-dos before
+touching shared code, or file follow-up work onto the mission-control board
+as it finishes (`brain_fleet_status`, `brain_list_projects`, `brain_project`,
+`brain_board_list` / `add` / `move` / `update`, `brain_recent_activity`).
+
+Register it once, for every project:
+
+```bash
+claude mcp add --scope user central-brain -- node "$HOME/path/to/central-brain/dist/mcp-bundle.mjs"
+```
+
+(`npm run build` produces the bundle; this checkout's own sessions get it
+automatically via the committed `.mcp.json`.) The MCP process is a thin stdio
+client of the running dashboard server — it finds the port through the same
+`runtime/endpoint` file the hooks use, so `CENTRAL_BRAIN_PORT` changes need
+no reconfiguration, and it never touches the data files directly. If the app
+isn't running, tools fail with a message saying exactly that.
+
 ### How the app runs the server
 
 The menubar app owns the server's lifetime. On launch it probes port 4317: if
@@ -227,6 +355,17 @@ rather than pretending to accept a value it would ignore. Note that a packaged
 
 To stop using AI, click **Remove key** (or **Skip for now** on first run, since
 the dashboard is fully usable without it).
+
+## Companion: Belfry
+
+[Belfry](https://github.com/chrismeehan20/belfry) is the social media and
+content tool built on the same stack and design language. When both run on
+this machine, Belfry reads Central Brain's `/api/brief` (default
+`http://127.0.0.1:4317`, configurable in Belfry's Settings) as source
+material for its idea miner — what your agents shipped today becomes
+tomorrow's build-in-public post, with Belfry's human approval gate between
+the two. Nothing is needed on this side: the brief endpoint Siri already
+uses is the whole integration surface.
 
 ## Development
 

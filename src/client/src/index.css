@@ -1,52 +1,105 @@
+/* One face, one job: Bricolage Grotesque carries the page and section titles,
+   where its character earns its keep. Everything functional runs on the
+   platform's own UI face — this is a Mac-resident instrument panel, and text
+   that matches the OS reads as native, not as a website visiting. Variable
+   weight axis, latin subset, self-hosted: 41KB, no network. */
 @font-face {
-  font-family: "Satoshi";
+  font-family: "Bricolage Grotesque";
   font-style: normal;
-  font-weight: 400;
+  font-weight: 200 800;
   font-display: swap;
-  src: url("/fonts/satoshi-400.woff2") format("woff2");
+  src: url("/fonts/bricolage-grotesque-latin-wght.woff2") format("woff2-variations");
 }
 
-@font-face {
-  font-family: "Satoshi";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("/fonts/satoshi-500.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "Satoshi";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/fonts/satoshi-700.woff2") format("woff2");
-}
-
+/* The theme follows the OS. Light is the authored default — this dashboard is
+   glanced at during the workday, on a desk, in daylight — and the original
+   dark world survives intact for the machines that ask for it. Every color in
+   the file routes through these tokens (tints via color-mix), so the two
+   blocks below are the entire difference between the themes. */
 :root {
-  color-scheme: dark;
-  --bg: #0b0e14;
-  --surface: #12161f;
-  --surface-raised: #171c28;
-  --border: #262c3a;
-  --ink: #e6e9f0;
-  --muted: #8891a7;
-  --accent: #7dd3fc;
-  --claude: #f5b942;
-  --codex: #4dd0e1;
+  color-scheme: light dark;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", var(--font-ui);
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --bg: #eef0f4;
+  --surface: #ffffff;
+  /* Sits ON surface (inputs, small controls), so in light it must be darker
+     than the card, not lighter — the inversion of the dark scheme's stack. */
+  --surface-raised: #f4f5f8;
+  --border: #dbdfe7;
+  --border-strong: #b6bfcc;
+  --ink: #171f2b;
+  --muted: #5a6375;
+  /* Same hue family as the dark theme's sky accent, pulled down to hold
+     4.5:1 as text on white. */
+  --accent: #0b64c8;
+  --claude: #a16207;
+  --codex: #0e7490;
   /* A third source of attention rows, and not an agent: pull requests polled
      from GitHub, which may or may not be an agent's work. Its own colour so the
-     panel never implies more than it actually knows. */
-  --github: #a78bfa;
-  --danger: #f87171;
+     panel never implies more than it actually knows. Violet-700 rather than the
+     dark scheme's #a78bfa: that value is a light violet chosen against #0b0e14
+     and does not hold as text on white. */
+  --github: #6d28d9;
+  --danger: #d92d20;
   /* Red's neighbour, for a failure one step removed (a PR rather than the
      branch you're standing on). */
-  --danger-pr: #fb923c;
+  --danger-pr: #c2410c;
+  /* Fleet status colours: an agent moving right now, and one blocked on you. */
+  --ok: #15803d;
+  --warn: #b45309;
+  /* Row separators and hover washes, by role: hairlines divide, hovers invite.
+     Hovering is a FILL in this language, never a border-color trick — the row
+     lights up under the cursor the way a native list row does. */
+  --hairline: rgba(23, 31, 43, 0.08);
+  --hover: rgba(23, 31, 43, 0.05);
+  /* A well is a recessed region content floats in (board columns, list
+     panels): slightly darker than the page in light, deeper than the page in
+     dark, never outlined. */
+  --well: rgba(23, 31, 43, 0.045);
+  /* A soft border defines a floating card without drawing a box around it —
+     the shadow does the talking; this just crisps the edge. */
+  --border-soft: rgba(23, 31, 43, 0.07);
+  /* Light elevates with layered shadow (ambient + key); dark elevates with a
+     lit top edge and fill (its shadows land on near-black and vanish), so
+     dark zeroes the shadows and lights the edge instead. */
+  --shadow-card: 0 1px 2px rgba(23, 31, 43, 0.05), 0 4px 14px rgba(23, 31, 43, 0.06);
+  --shadow-lift: 0 2px 6px rgba(23, 31, 43, 0.07), 0 12px 28px rgba(23, 31, 43, 0.1);
+  --edge-highlight: 0 0 #0000;
   /* Three radii, by role rather than one value everywhere: panels, project
      cards, and small controls should not all share a corner. */
-  --radius: 10px;
-  --radius-card: 13px;
-  --radius-card-lg: 17px;
-  --radius-control: 6px;
+  --radius: 12px;
+  --radius-card: 14px;
+  --radius-card-lg: 18px;
+  --radius-control: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0e14;
+    --surface: #12161f;
+    --surface-raised: #171c28;
+    --border: #262c3a;
+    --border-strong: #3a4256;
+    --ink: #e6e9f0;
+    --muted: #8891a7;
+    --accent: #7dd3fc;
+    --claude: #f5b942;
+    --codex: #4dd0e1;
+    --github: #a78bfa;
+    --danger: #f87171;
+    --danger-pr: #fb923c;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --hairline: rgba(255, 255, 255, 0.06);
+    --hover: rgba(255, 255, 255, 0.05);
+    --well: rgba(0, 0, 0, 0.22);
+    --border-soft: rgba(255, 255, 255, 0.07);
+    --shadow-card: none;
+    --shadow-lift: none;
+    --edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  }
 }
 
 * {
@@ -57,12 +110,80 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font-family: "Satoshi", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
+}
+
+/* The browser chrome nobody styles still carries the theme: selection, caret,
+   and scrollbars ship with defaults that belong to no design system. */
+::selection {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+input,
+textarea {
+  caret-color: var(--accent);
+}
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 button {
   font-family: inherit;
   cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The one authored moment: a view presents by rising 6px as it fades in,
+   once, on navigation — pages remount per route, so polling re-renders never
+   replay it. Controls answer the hand instead with a press (below). */
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.os__main > main {
+  animation: view-in 200ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+/* Tactile press on real controls — buttons that DO something give 2% under
+   the finger. Text-like buttons (row leads, title toggles) stay still. */
+.topbar__meta button:active,
+.section__action:active,
+.agent-row__open:active,
+.agents__more:active,
+.fleet-chip:active,
+.chip:active,
+.board-col__add:active,
+.board-card__actions button:active,
+.sidebar__item:active,
+.sidebar__collapse:active {
+  transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .os__main > main {
+    animation: none;
+  }
+  .topbar__meta button:active,
+  .section__action:active,
+  .agent-row__open:active,
+  .agents__more:active,
+  .fleet-chip:active,
+  .chip:active,
+  .board-col__add:active,
+  .board-card__actions button:active,
+  .sidebar__item:active,
+  .sidebar__collapse:active {
+    transform: none;
+  }
 }
 
 .shell {
@@ -90,21 +211,30 @@ button {
 }
 
 .topbar__meta button {
-  background: var(--surface-raised);
+  background: var(--surface);
   color: var(--ink);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: var(--edge-highlight), var(--shadow-card);
+  transition: background 120ms ease, transform 80ms ease;
 }
 
 .topbar__meta button:hover:not(:disabled) {
-  border-color: var(--accent);
+  background: var(--surface-raised);
+}
+
+.topbar__gear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .topbar__search {
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   color: var(--ink);
   font-family: inherit;
@@ -113,11 +243,14 @@ button {
   flex: 1 1 12rem;
   min-width: 0;
   max-width: 240px;
+  box-shadow: var(--edge-highlight), var(--shadow-card);
+  transition: box-shadow 120ms ease;
 }
 
 .topbar__search:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 /* Pulled up under the topbar's own bottom margin so the chips read as part of
@@ -130,30 +263,36 @@ button {
 }
 
 .chip {
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
   color: var(--muted);
   font-size: 0.75rem;
-  padding: 0.25rem 0.6rem;
+  font-weight: 500;
+  padding: 0.28rem 0.7rem;
+  transition: background 120ms ease, transform 80ms ease;
 }
 
 .chip:hover {
-  border-color: var(--accent);
+  background: var(--hover);
   color: var(--ink);
 }
 
-/* On is a colour change, not a fill — four lit chips should still be quieter
-   than the project cards they are filtering. */
+/* On is a filled state — the chip you pressed stays lit, the way a native
+   filter segment does — but tinted, so four lit chips still sit quieter
+   than the cards they filter. */
 .chip--on {
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: transparent;
   color: var(--accent);
 }
 
 h1 {
-  font-size: 1.75rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.9rem;
   margin: 0 0 0.25rem;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 .subtitle {
@@ -165,6 +304,7 @@ h1 {
 .scan-time {
   color: var(--muted);
   font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .status {
@@ -182,8 +322,8 @@ h1 {
   align-items: baseline;
   gap: 0.75rem;
   margin-bottom: 1.5rem;
-  border: 1px solid rgba(248, 113, 113, 0.35);
-  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
   border-radius: var(--radius);
   padding: 0.6rem 0.9rem;
   font-size: 0.82rem;
@@ -210,10 +350,11 @@ h1 {
 
 .attention {
   margin-bottom: 2.5rem;
-  border: 1px solid rgba(248, 113, 113, 0.4);
-  background: rgba(248, 113, 113, 0.06);
-  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--danger) 22%, transparent);
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
+  border-radius: var(--radius-card-lg);
   padding: 1rem 1.1rem;
+  box-shadow: var(--shadow-card);
 }
 
 .attention__title {
@@ -235,7 +376,7 @@ h1 {
   flex-wrap: wrap;
   font-size: 0.85rem;
   padding: 0.4rem 0.1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .attention__item:last-child {
@@ -270,7 +411,7 @@ button.attention__lead {
 }
 
 button.attention__lead:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover);
 }
 
 button.attention__lead:focus-visible {
@@ -296,7 +437,7 @@ button.attention__lead:focus-visible {
 .attention__control:hover:not(:disabled) {
   border-color: var(--border);
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover);
 }
 
 .attention__control:focus-visible {
@@ -314,7 +455,7 @@ button.attention__lead:focus-visible {
 }
 
 .attention__control--dismiss:hover:not(:disabled) {
-  border-color: rgba(248, 113, 113, 0.5);
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
   color: var(--danger);
 }
 
@@ -329,18 +470,18 @@ button.attention__lead:focus-visible {
   font-size: 0.72rem;
   border-radius: 5px;
   padding: 0.15rem 0.55rem;
-  background: rgba(248, 113, 113, 0.18);
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
   color: var(--danger);
   white-space: nowrap;
 }
 
 .attention__item--waiting .attention__badge {
-  background: rgba(245, 185, 66, 0.15);
+  background: color-mix(in srgb, var(--claude) 15%, transparent);
   color: var(--claude);
 }
 
 .attention__item--codex-maybe-waiting .attention__badge {
-  background: rgba(77, 208, 225, 0.15);
+  background: color-mix(in srgb, var(--codex) 15%, transparent);
   color: var(--codex);
 }
 
@@ -482,14 +623,20 @@ button.attention__lead:focus-visible {
 }
 
 .section__action {
-  background: var(--surface-raised);
-  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: none;
   color: var(--accent);
-  border-radius: 6px;
-  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-control);
+  padding: 0.35rem 0.75rem;
   font-size: 0.75rem;
+  font-weight: 500;
   white-space: nowrap;
   margin-bottom: 0.9rem;
+  transition: background 120ms ease, transform 80ms ease;
+}
+
+.section__action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .section__action:disabled {
@@ -497,8 +644,9 @@ button.attention__lead:focus-visible {
 }
 
 .section__title {
+  font-family: var(--font-display);
   font-size: 1.05rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--muted);
   margin: 0 0 0.9rem;
   display: flex;
@@ -547,16 +695,18 @@ button.attention__lead:focus-visible {
 
 .card {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-card);
   padding: 0.9rem 1rem 0.85rem;
   display: flex;
   flex-direction: column;
-  transition: border-color 0.15s ease;
+  box-shadow: var(--edge-highlight), var(--shadow-card);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .card:hover {
-  border-color: #3a4256;
+  box-shadow: var(--edge-highlight), var(--shadow-lift);
+  transform: translateY(-1px);
 }
 
 /* Pinned projects are the ones being worked on, so they get real presence
@@ -639,7 +789,7 @@ button.attention__lead:focus-visible {
   font-weight: 600;
   border-radius: var(--radius-control);
   padding: 0.15rem 0.5rem;
-  background: rgba(248, 113, 113, 0.15);
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
   color: var(--danger);
 }
 
@@ -647,7 +797,7 @@ button.attention__lead:focus-visible {
    further away — so: same pill, shifted off red toward amber, so the two are
    never mistaken for each other when they appear side by side. */
 .flag--pr-failing {
-  background: rgba(251, 146, 60, 0.15);
+  background: color-mix(in srgb, var(--danger-pr) 15%, transparent);
   color: var(--danger-pr);
 }
 
@@ -752,7 +902,7 @@ button.attention__lead:focus-visible {
 
 .relocate__path,
 .relocate__select {
-  font-family: "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.72rem;
   color: var(--ink);
   overflow: hidden;
@@ -885,7 +1035,7 @@ button.attention__lead:focus-visible {
 .card__path {
   color: var(--muted);
   font-size: 0.7rem;
-  font-family: "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   margin-top: 0.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -900,7 +1050,7 @@ button.attention__lead:focus-visible {
   display: block;
   width: 100%;
   text-align: left;
-  font-family: "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 .card__path--open:hover {
@@ -937,7 +1087,7 @@ button.attention__lead:focus-visible {
    .flag, which is reserved for states worth interrupting for. Clicking it
    dismisses the badge (writes an empty override). */
 .card__new {
-  background: rgba(125, 211, 252, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   border: none;
   color: var(--accent);
   font-size: 0.68rem;
@@ -949,7 +1099,7 @@ button.attention__lead:focus-visible {
 }
 
 .card__new:hover {
-  background: rgba(125, 211, 252, 0.25);
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 /* Pin/Hide as icon buttons, grouped at the right edge of the action row. */
@@ -1036,8 +1186,8 @@ button.attention__lead:focus-visible {
 .detail__cap {
   color: var(--claude);
   font-size: 0.82rem;
-  background: rgba(245, 185, 66, 0.1);
-  border: 1px solid rgba(245, 185, 66, 0.3);
+  background: color-mix(in srgb, var(--claude) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--claude) 30%, transparent);
   border-radius: var(--radius);
   padding: 0.5rem 0.8rem;
   margin: 0 0 1rem;
@@ -1050,8 +1200,8 @@ button.attention__lead:focus-visible {
   gap: 0.6rem;
   color: var(--muted);
   font-size: 0.82rem;
-  background: rgba(125, 211, 252, 0.07);
-  border: 1px solid rgba(125, 211, 252, 0.25);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
   border-radius: var(--radius);
   padding: 0.5rem 0.8rem;
   margin: 0 0 1rem;
@@ -1121,7 +1271,7 @@ button.attention__lead:focus-visible {
   gap: 0.5rem;
   padding: 0.35rem 0.1rem;
   font-size: 0.85rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .ditem:last-child {
@@ -1138,7 +1288,7 @@ button.attention__lead:focus-visible {
 }
 
 .ditem__check:hover {
-  color: #4ade80;
+  color: var(--ok);
 }
 
 .ditem__text {
@@ -1157,7 +1307,7 @@ button.attention__lead:focus-visible {
 
 .ditem__origin--ai {
   color: var(--accent);
-  background: rgba(125, 211, 252, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .ditem__dismiss,
@@ -1266,7 +1416,7 @@ button.attention__lead:focus-visible {
   gap: 0.5rem;
   font-size: 0.82rem;
   padding: 0.3rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .activity__row:last-child {
@@ -1351,16 +1501,19 @@ button.activity__text--open:hover {
 
 .setup {
   margin-bottom: 2.5rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   background: var(--surface);
-  border-radius: var(--radius);
-  padding: 1rem 1.1rem;
+  border-radius: var(--radius-card-lg);
+  padding: 1.1rem 1.25rem;
+  box-shadow: var(--edge-highlight), var(--shadow-card);
 }
 
-/* First-run gets an accent edge; the same panel behind the gear stays quiet. */
+/* First-run gets a quiet accent wash; the same panel behind the gear stays
+   plain. A wash over a floating card, never an outlined box — the outline
+   version shouted over the grid it was introducing. */
 .setup--onboarding {
-  border-color: var(--accent);
-  background: var(--surface-raised);
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .setup__header {
@@ -1420,18 +1573,23 @@ button.activity__text--open:hover {
 }
 
 .setup__row button {
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: none;
+  border-radius: var(--radius-control);
+  color: var(--accent);
   font-size: 0.8rem;
-  padding: 0.5rem 0.85rem;
+  font-weight: 500;
+  padding: 0.5rem 0.9rem;
   white-space: nowrap;
+  transition: background 120ms ease, transform 80ms ease;
+}
+
+.setup__row button:active {
+  transform: scale(0.98);
 }
 
 .setup__row button:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .setup__row button:disabled {
@@ -1502,6 +1660,19 @@ button.activity__text--open:hover {
   gap: 0.6rem;
   padding: 0.35rem 0;
   font-size: 0.8rem;
+}
+
+/* Phone width: the row stacks — tool name up top, status copy at full
+   measure, the action below it — instead of wrapping the copy into a
+   one-word column beside a floating button. */
+@media (max-width: 560px) {
+  .hooks__row {
+    flex-wrap: wrap;
+  }
+  .hooks__row > :first-child {
+    flex-basis: 100%;
+    min-width: 0;
+  }
 }
 
 .hooks__tool {
@@ -1668,7 +1839,7 @@ button.activity__text--open:hover {
 }
 
 .relocate__confidence--high {
-  color: #4ade80;
+  color: var(--ok);
 }
 
 .relocate__confidence--medium {
@@ -1681,7 +1852,7 @@ button.activity__text--open:hover {
 
 /* Detail page: branch and activity labels as text, matching the cards. */
 .detail__branch {
-  font-family: "SF Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.78rem;
   color: var(--muted);
 }
@@ -1724,6 +1895,1020 @@ button.activity__text--open:hover {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* The ntfy row stacks its label over the field — a URL needs the width. */
+.setup__pref--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.setup__pref-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.setup__pref-row .setup__input {
+  flex: 1;
+}
+
+/* ============================================================ OS shell ==== */
+/* The agentic-OS chrome: a persistent sidebar beside every view. The shell
+   (.shell) keeps its centered max-width INSIDE the main pane, so the Overview
+   grid and the detail page render exactly as before, just offset by the rail. */
+
+.os {
+  display: flex;
+  min-height: 100vh;
+}
+
+.os__main {
+  flex: 1;
+  min-width: 0; /* long paths inside must truncate, not widen the pane */
+}
+
+.shell--wide {
+  max-width: 1520px;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  width: 226px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 1.1rem 0.8rem;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+  border-right: 1px solid var(--border);
+}
+
+.sidebar--collapsed {
+  width: 64px;
+  padding: 1.1rem 0.6rem;
+}
+
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.55rem 1.1rem;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.sidebar__mark {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.sidebar__name {
+  display: flex;
+  flex-direction: column;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.sidebar__tagline {
+  font-weight: 400;
+  font-size: 0.68rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.sidebar__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background 120ms ease, color 120ms ease, transform 80ms ease;
+}
+
+.sidebar__item:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+/* The active view is a filled, accent-tinted pill — one lit shape, readable
+   from the corner of the eye, with nothing else competing for the row. */
+.sidebar__item--active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+.sidebar__item--active:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.sidebar--collapsed .sidebar__item {
+  justify-content: center;
+  padding: 0.55rem 0;
+}
+
+.sidebar__label {
+  white-space: nowrap;
+}
+
+.sidebar__badge {
+  margin-left: auto;
+  min-width: 1.2rem;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.05rem 0.3rem;
+  border-radius: 999px;
+}
+
+.sidebar__badge + .sidebar__badge {
+  margin-left: 0.25rem;
+}
+
+.sidebar__badge--waiting {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
+.sidebar__badge--active {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  color: var(--ok);
+}
+
+/* Collapsed, the badges ride the icon's corner so the count survives. */
+.sidebar--collapsed .sidebar__badge {
+  position: absolute;
+  top: 0.1rem;
+  right: 0.15rem;
+  margin: 0;
+}
+
+.sidebar--collapsed .sidebar__badge--active {
+  top: auto;
+  bottom: 0.1rem;
+}
+
+/* The usage meter sits at the rail's foot, above Collapse. */
+.sidebar__usage {
+  margin-top: auto;
+  padding: 0.55rem 0.6rem 0.2rem;
+  cursor: help;
+}
+
+.sidebar__usage-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.sidebar__usage-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.sidebar__usage-bar {
+  margin-top: 0.35rem;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--well);
+  overflow: hidden;
+}
+
+.sidebar__usage-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 1s linear;
+}
+
+.sidebar__usage + .sidebar__collapse {
+  margin-top: 0.3rem;
+}
+
+.sidebar__collapse {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.55rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.sidebar__collapse:hover {
+  color: var(--ink);
+  background: var(--surface-raised);
+}
+
+.sidebar--collapsed .sidebar__collapse {
+  justify-content: center;
+}
+
+/* Phone-width: the rail drops to icons regardless of the stored preference —
+   a 226px rail on a 390px screen would leave no room for the content. */
+@media (max-width: 760px) {
+  .sidebar {
+    width: 60px;
+    padding: 1rem 0.5rem;
+  }
+  .sidebar .sidebar__label,
+  .sidebar .sidebar__name {
+    display: none;
+  }
+  .sidebar .sidebar__item {
+    justify-content: center;
+    padding: 0.55rem 0;
+  }
+  .sidebar .sidebar__badge {
+    position: absolute;
+    top: 0.1rem;
+    right: 0.15rem;
+    margin: 0;
+  }
+  .sidebar .sidebar__badge--active {
+    top: auto;
+    bottom: 0.1rem;
+  }
+  .sidebar .sidebar__collapse {
+    display: none;
+  }
+}
+
+/* ========================================================= fleet status === */
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot--active {
+  color: var(--ok);
+  background: currentColor;
+  animation: status-pulse 2.4s ease-out infinite;
+}
+
+.status-dot--waiting {
+  color: var(--danger);
+  background: currentColor;
+  animation: status-pulse 1.6s ease-out infinite;
+}
+
+.status-dot--idle {
+  background: var(--muted);
+  opacity: 0.55;
+}
+
+@keyframes status-pulse {
+  0% {
+    box-shadow: 0 0 0 0 currentColor;
+    opacity: 1;
+  }
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+    opacity: 0.85;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot--active,
+  .status-dot--waiting {
+    animation: none;
+  }
+}
+
+/* ======================================================= mission control == */
+
+.board__head,
+.agents__head,
+.activity-page__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+/* .chips carries a negative top margin tuned for the Overview topbar; inside
+   these page headers it sits inline, so neutralize it. */
+.activity-page__head .chips {
+  margin: 0;
+}
+
+.board__fleet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.fleet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* A chip can never outgrow the viewport: the branch yields first, then the
+     project name — a phone must not scroll sideways for one long ref. */
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.4rem 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 0.8rem;
+  box-shadow: var(--edge-highlight), var(--shadow-card);
+  transition: background 120ms ease, transform 80ms ease, box-shadow 120ms ease;
+}
+
+.fleet-chip:hover {
+  background: var(--surface-raised);
+  box-shadow: var(--edge-highlight), var(--shadow-lift);
+}
+
+.fleet-chip--waiting {
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 25%, transparent);
+}
+
+.fleet-chip__project {
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fleet-chip__tool {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.fleet-chip__tool--claude {
+  color: var(--claude);
+}
+
+.fleet-chip__tool--codex {
+  color: var(--codex);
+}
+
+.fleet-chip__branch {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  flex-shrink: 1;
+  min-width: 2rem;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board__columns {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .board__columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .board__columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.board-col {
+  background: var(--well);
+  border-radius: var(--radius-card-lg);
+  padding: 0.7rem;
+  min-height: 12rem;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 120ms ease;
+}
+
+.board-col--drop {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.board-col__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0.2rem 0.75rem;
+}
+
+.board-col__head h2 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.board-col__count {
+  font-size: 0.72rem;
+  color: var(--muted);
+  background: var(--surface-raised);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+}
+
+.board-col__add {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  padding: 0.2rem;
+}
+
+.board-col__add:hover {
+  color: var(--ink);
+  border-color: var(--border);
+}
+
+.board-col__cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  flex: 1;
+}
+
+.board-col__empty {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin: 0.25rem 0.2rem;
+}
+
+.board-compose {
+  margin-bottom: 0.55rem;
+}
+
+.board-compose__input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.55rem 0.7rem;
+  box-shadow: var(--shadow-card);
+}
+
+.board-compose__input:focus {
+  outline: none;
+}
+
+.board-card {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-card);
+  box-shadow: var(--edge-highlight), var(--shadow-card);
+  transition: opacity 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.board-card:hover {
+  box-shadow: var(--edge-highlight), var(--shadow-lift);
+  transform: translateY(-1px);
+}
+
+.board-card--dragging {
+  opacity: 0.35;
+}
+
+/* The insertion line rides the card the drop would land above. */
+.board-card--dropbefore {
+  box-shadow: 0 -0.4rem 0 -0.13rem var(--accent);
+}
+
+.board-card__dropline {
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.board-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--ink);
+  padding: 0.65rem 0.75rem;
+  font-family: inherit;
+  cursor: grab;
+}
+
+.board-card__title {
+  font-size: 0.87rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.board-card__note {
+  font-size: 0.76rem;
+  color: var(--muted);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-line;
+}
+
+.board-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.board-card__project {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+/* Ellipsis lives on the name, its own flex child — text-overflow on the flex
+   container silently clips nested spans mid-word instead of eliding. */
+.board-card__project-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-card__status {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.board-card__status--waiting {
+  color: var(--danger);
+}
+
+.board-card__status--active {
+  color: var(--ok);
+}
+
+.board-card__age {
+  flex-shrink: 0;
+}
+
+.board-card__dispatched {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+/* Dispatch is the card's power move: a filled accent button, set apart from
+   the plain edit actions below it by a hairline. */
+.board-card__dispatch {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.board-card__dispatch-btn {
+  white-space: nowrap;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-control);
+  color: var(--surface);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.4rem 0.8rem;
+  transition: filter 120ms ease, transform 80ms ease;
+}
+
+.board-card__dispatch-btn:hover {
+  filter: brightness(1.12);
+}
+
+.board-card__dispatch-btn:active {
+  transform: scale(0.98);
+}
+
+.board-card__dispatch-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.board-card__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.board-card__input,
+.board-card__textarea,
+.board-card__select {
+  width: 100%;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.82rem;
+  padding: 0.4rem 0.55rem;
+}
+
+.board-card__input:focus,
+.board-card__textarea:focus,
+.board-card__select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.board-card__textarea {
+  resize: vertical;
+}
+
+.board-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.board-card__actions button {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.3rem 0.65rem;
+  transition: background 120ms ease, transform 80ms ease;
+}
+
+.board-card__actions button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.board-card__save {
+  background: color-mix(in srgb, var(--accent) 12%, transparent) !important;
+  border-color: transparent !important;
+  color: var(--accent) !important;
+}
+
+.board-card__delete {
+  margin-left: auto;
+  display: inline-flex;
+  color: var(--muted) !important;
+}
+
+.board-card__delete:hover {
+  color: var(--danger) !important;
+  border-color: var(--danger) !important;
+}
+
+/* ============================================================== agents ==== */
+
+.agents__group {
+  margin-bottom: 2rem;
+}
+
+.agents__group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 0.6rem;
+}
+
+.agents__count {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+
+.agents__blurb {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+  margin-left: 0.25rem;
+}
+
+.agents__empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.agents__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-card-lg);
+  padding: 0.35rem;
+  box-shadow: var(--edge-highlight), var(--shadow-card);
+}
+
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  border-radius: var(--radius);
+  padding: 0.55rem 0.75rem;
+  font-size: 0.83rem;
+  transition: background 120ms ease;
+}
+
+.agent-row:hover {
+  background: var(--hover);
+}
+
+.agent-row--waiting {
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+}
+
+.agent-row--waiting:hover {
+  background: color-mix(in srgb, var(--danger) 11%, transparent);
+}
+
+.agent-row__tool {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+
+.agent-row__tool--claude {
+  color: var(--claude);
+}
+
+.agent-row__tool--codex {
+  color: var(--codex);
+}
+
+.agent-row__project {
+  background: none;
+  border: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.83rem;
+  font-weight: 500;
+  padding: 0;
+  flex-shrink: 0;
+  max-width: 13rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-row__project:hover {
+  color: var(--accent);
+}
+
+.agent-row__desc {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-row--waiting .agent-row__desc {
+  color: var(--danger);
+}
+
+.agent-row__facts {
+  display: flex;
+  gap: 0.6rem;
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.agent-row__fact--branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.agent-row__age {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  min-width: 3.6rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-row__open {
+  flex-shrink: 0;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.3rem 0.75rem;
+  box-shadow: var(--edge-highlight);
+  transition: background 120ms ease, transform 80ms ease;
+}
+
+.agent-row__open:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.agents__more {
+  margin-top: 0.6rem;
+  background: none;
+  border: none;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.35rem 0.8rem;
+  transition: background 120ms ease, transform 80ms ease;
+}
+
+.agents__more:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+/* On narrow screens the middle facts go; the row keeps status, names, age,
+   and the Open button — the project name is what yields, not the controls. */
+@media (max-width: 860px) {
+  .agent-row__facts {
+    display: none;
+  }
+  .agent-row__desc {
+    display: none;
+  }
+  .agent-row__project {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+  .agent-row__age {
+    min-width: 0;
+  }
+}
+
+/* ============================================================ activity ==== */
+
+.activity-page__empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+  max-width: 34rem;
+}
+
+.feed {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--edge-highlight), var(--shadow-card);
+}
+
+.feed__row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius);
+  font-size: 0.84rem;
+  transition: background 120ms ease;
+}
+
+.feed__row:hover {
+  background: var(--hover);
+}
+
+/* The tool marker is a slim colored tick rather than a word: at feed density
+   a column of "Claude Claude Codex" reads as noise, a color column doesn't. */
+.feed__tool {
+  align-self: stretch;
+  width: 3px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.feed__tool--claude {
+  background: var(--claude);
+}
+
+.feed__tool--codex {
+  background: var(--codex);
+}
+
+.feed__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.feed__project {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.84rem;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.feed__project:hover {
+  color: var(--accent);
+}
+
+.feed__project--unknown {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.feed__message {
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed__row--PermissionRequest .feed__message {
+  color: var(--danger);
+}
+
+.feed__row--Notification .feed__message {
+  color: var(--warn);
+}
+
+.feed__age {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 
 /* GitHub CLI status, in the ⚙ panel under Connected tools. Deliberately shaped

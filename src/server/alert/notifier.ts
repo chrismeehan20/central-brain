@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { getPreferences } from "../store/db.js";
+import { getPreferences, settingsDb } from "../store/db.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -31,8 +31,27 @@ export interface NotifyOptions {
 export async function notify({ title, body, sound }: NotifyOptions): Promise<void> {
   // Gated here, not at call sites, so muting covers every alert path at once.
   // Muting only silences the desktop banner — the attention panel and SSE
-  // stream still update.
+  // stream still update. The mute covers phone push too: one switch means
+  // "stop pinging me", wherever the ping lands.
   if (!getPreferences().notifications) return;
+
+  // Phone push rides alongside the desktop banner, fire-and-forget: a slow or
+  // unreachable ntfy host must never delay the local notification path. Same
+  // content rule as everywhere: project path and event kind, never prompts.
+  const ntfyUrl = settingsDb.data.ntfyUrl;
+  if (ntfyUrl) {
+    fetch(ntfyUrl, {
+      method: "POST",
+      headers: {
+        Title: title,
+        Priority: sound ? "high" : "default",
+        Tags: "brain",
+      },
+      body,
+      signal: AbortSignal.timeout(5000),
+    }).catch((err) => console.error("ntfy push failed:", err?.cause?.code ?? err?.message ?? err));
+  }
+
   try {
     if (await checkTerminalNotifier()) {
       const args = ["-title", title, "-message", body];

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { AttentionItem, ProjectDetail } from "@shared/types.js";
+import type { ActivityEvent, AttentionItem, ProjectDetail } from "@shared/types.js";
 import { bus } from "../events/bus.js";
 import { getAttentionItems } from "../alert/attention.js";
 
@@ -26,12 +26,18 @@ export async function streamRoutes(app: FastifyInstance) {
     const onDetail = (payload: { path: string; detail: ProjectDetail }) => send("detail", payload);
     bus.on("detail:update", onDetail);
 
+    // One event per frame, not the whole window: the Activity view already
+    // fetched the backlog over REST, so the stream only has to carry deltas.
+    const onActivity = (event: ActivityEvent) => send("activity", event);
+    bus.on("activity:append", onActivity);
+
     const heartbeat = setInterval(() => reply.raw.write(": heartbeat\n\n"), HEARTBEAT_MS);
 
     req.raw.on("close", () => {
       clearInterval(heartbeat);
       bus.off("attention:update", onUpdate);
       bus.off("detail:update", onDetail);
+      bus.off("activity:append", onActivity);
     });
   });
 }

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "central-brain": {
+      "command": "node",
+      "args": ["dist/mcp-bundle.mjs"]
+    }
+  }
+}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ApiKeyStatus, EditorId, Preferences, SettingsResponse } from "@shared/types";
 import { EDITORS } from "@shared/types";
-import { clearApiKey, dismissApiKeySetup, saveApiKey, updatePreferences } from "./api";
+import { clearApiKey, dismissApiKeySetup, saveApiKey, saveNtfyUrl, updatePreferences } from "./api";
 import HooksPanel from "./HooksPanel";
 import GithubPanel from "./GithubPanel";
 
@@ -34,6 +34,21 @@ export default function ApiKeyPanel({ mode, settings, onStatusChange, onPreferen
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [prefsError, setPrefsError] = useState<string | null>(null);
+  // Seeded from the server's stored value; edited locally until Save.
+  const [ntfyValue, setNtfyValue] = useState(settings.ntfy?.url ?? "");
+  const [ntfySaved, setNtfySaved] = useState(false);
+
+  async function applyNtfy() {
+    setPrefsError(null);
+    setNtfySaved(false);
+    try {
+      const next = await saveNtfyUrl(ntfyValue.trim());
+      setNtfyValue(next.url ?? "");
+      setNtfySaved(true);
+    } catch (err) {
+      setPrefsError((err as Error).message ?? String(err));
+    }
+  }
   // Edited as free text and saved on blur: one PUT per edit session rather than
   // one per keystroke, and a half-typed "owner/" never reaches the validator.
   const [reposDraft, setReposDraft] = useState(() => preferences.remoteRepos.join("\n"));
@@ -180,6 +195,35 @@ export default function ApiKeyPanel({ mode, settings, onStatusChange, onPreferen
                 </option>
               ))}
             </select>
+          </label>
+          <label className="setup__pref setup__pref--stack">
+            <span>
+              Phone push (ntfy)
+              <span className="setup__pref-hint">
+                Alerts also go to this{" "}
+                <a href="https://ntfy.sh" target="_blank" rel="noreferrer">
+                  ntfy
+                </a>{" "}
+                topic — subscribe to it in the ntfy app on your phone. Empty = off. Anyone who
+                knows a public topic's name can read it, so use a long random one (or self-host).
+              </span>
+            </span>
+            <span className="setup__pref-row">
+              <input
+                className="setup__input"
+                type="url"
+                placeholder="https://ntfy.sh/your-long-random-topic"
+                value={ntfyValue}
+                onChange={(e) => {
+                  setNtfyValue(e.target.value);
+                  setNtfySaved(false);
+                }}
+                spellCheck={false}
+              />
+              <button type="button" onClick={applyNtfy}>
+                {ntfySaved ? "Saved" : "Save"}
+              </button>
+            </span>
           </label>
           <label className="setup__pref setup__pref--stacked">
             <span>
