@@ -196,7 +196,17 @@ export async function fetchGithubStatus(projectPath: string): Promise<GithubStat
   try {
     const prJson = await run(
       gh,
-      ["pr", "list", "--json", "number,title,state,isDraft,statusCheckRollup", "--limit", "20"],
+      [
+        "pr",
+        "list",
+        "--json",
+        // A field gh doesn't know throws the whole call into the catch below
+        // and openPrs vanishes — extend this list only with long-supported
+        // names.
+        "number,title,state,isDraft,statusCheckRollup,url,updatedAt,headRefName,author",
+        "--limit",
+        "20",
+      ],
       projectPath
     );
     const prs: any[] = JSON.parse(prJson || "[]");
@@ -206,6 +216,10 @@ export async function fetchGithubStatus(projectPath: string): Promise<GithubStat
       state: pr.state,
       isDraft: pr.isDraft,
       ciStatus: aggregateCheckRollup(pr.statusCheckRollup),
+      url: pr.url,
+      updatedAt: pr.updatedAt,
+      headRefName: pr.headRefName,
+      author: pr.author?.login,
     }));
   } catch {
     // gh missing, not a GitHub remote, or offline

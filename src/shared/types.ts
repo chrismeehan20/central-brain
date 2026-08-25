@@ -52,6 +52,13 @@ export interface GithubStatus {
      * Undefined when the PR has no checks at all.
      */
     ciStatus?: string;
+    // The fields below are optional at the type level even though gh always
+    // returns them: a `github.json` cached by an older build lacks them until
+    // the next poll pass, so every consumer must tolerate their absence.
+    url?: string;
+    updatedAt?: string;
+    headRefName?: string;
+    author?: string; // GitHub login
   }>;
   /**
    * CI state of the checkout's CURRENT BRANCH — the newest workflow run on
@@ -182,6 +189,97 @@ export interface Project {
   github?: GithubStatus;
   summary?: ProjectSummary;
   openItems?: string[]; // open detail-item texts, for dashboard search
+}
+
+/**
+ * Mission-control board columns, in display order. Four fixed lanes rather
+ * than user-defined ones: the board tracks the handoff between you and your
+ * agents, and that lifecycle has exactly these stages — captured, chosen,
+ * being worked, finished. Custom columns would let the two live lanes
+ * ("doing" mirrors running agents, "done" is the graveyard) drift out from
+ * under the automation that reads them.
+ */
+export type BoardColumnId = "inbox" | "next" | "doing" | "done";
+
+export const BOARD_COLUMNS: Array<{ id: BoardColumnId; label: string; hint: string }> = [
+  { id: "inbox", label: "Inbox", hint: "Captured, not yet chosen" },
+  { id: "next", label: "Up next", hint: "Chosen for an agent's next run" },
+  { id: "doing", label: "In progress", hint: "An agent (or you) is on it" },
+  { id: "done", label: "Done", hint: "Shipped or abandoned" },
+];
+
+/**
+ * One card on the cross-project mission-control board. User-owned planning
+ * data, never written by AI — the live agent state next to it (running /
+ * waiting) is *derived* at render time from sessions and attention items, so
+ * the card never goes stale when an agent finishes without telling anyone.
+ *
+ * Ordering is positional: a card's rank within its column is its position
+ * among same-column cards in the stored array. No `order` field to drift or
+ * collide — a move is an array splice, and two clients that race converge on
+ * whatever the server last wrote.
+ */
+export interface BoardCard {
+  id: string;
+  title: string;
+  /** Freeform detail, user-owned, shown on the open card. */
+  note?: string;
+  /** Canonical project path this card belongs to; absent = not tied to a project. */
+  projectPath?: string;
+  column: BoardColumnId;
+  createdAt: string;
+  updatedAt: string;
+  /** Set when the card entered "done"; cleared if it moves back out. */
+  doneAt?: string;
+  /**
+   * Set when "Start agent" launched a session for this card: where it ran and
+   * on which branch. A record, not live state — the agent's liveness still
+   * comes from the fleet derivation like every other session's.
+   */
+  dispatch?: {
+    at: string; // ISO
+    path: string; // the checkout the agent was started in
+    branch?: string; // present when a fresh worktree was cut
+  };
+}
+
+/**
+ * One entry in the live activity stream — a hook event that actually arrived,
+ * kept as a rolling window. This is the observability layer: the attention
+ * panel shows what needs you *now*, the stream shows what the fleet has been
+ * doing. Metadata only, mirroring the attention rules: event names and tool
+ * names, never prompts or tool inputs.
+ */
+export interface ActivityEvent {
+  id: string;
+  at: string; // ISO timestamp
+  tool: SourceTool;
+  sessionId: string;
+  /** Canonical cwd; absent when the event carried none. */
+  projectPath?: string;
+  /** The raw hook_event_name, e.g. "PermissionRequest". */
+  event: string;
+  /** Human-readable line for the feed, derived server-side from the event. */
+  message: string;
+}
+
+/**
+ * The Claude subscription usage window, as best this machine can estimate it.
+ * Anthropic exposes no API for it, so this is inferred from observed session
+ * activity: a window opens with the first prompt after the previous window
+ * expired and lasts five hours. `estimate` is always true — the UI must say
+ * "estimated", never assert. No token math is attempted; the window's
+ * boundaries are the schedulable fact (when overnight work can start again),
+ * its fill is not knowable from here.
+ */
+export interface UsageWindow {
+  active: boolean;
+  windowStart?: string; // ISO; present when a window has been observed
+  windowEnd?: string;
+  remainingMs?: number; // present only while active
+  /** How many distinct activity minutes inform this; low counts mean a rougher guess. */
+  observations: number;
+  estimate: true;
 }
 
 export type AttentionType =
@@ -325,6 +423,14 @@ export const EDITORS: Record<
 
 export const DEFAULT_EDITOR: EditorId = "vscode";
 
+/**
+ * The OS shell's top-level views: the overview grid plus the cross-project
+ * surfaces the sidebar routes to. Hidden and missing projects stay out of the
+ * consolidated lists — see client/src/views.ts.
+ */
+export const DASHBOARD_VIEWS = ["overview", "board", "agents", "prs", "activity"] as const;
+export type DashboardView = (typeof DASHBOARD_VIEWS)[number];
+
 /** User preferences editable from the settings panel. */
 export interface Preferences {
   /** Fire desktop notifications for attention events. Off = the panel still updates, silently. */
@@ -339,12 +445,19 @@ export interface Preferences {
    * claude.ai/code never becomes a card on its own.
    */
   remoteRepos: string[];
+  /**
+   * The view to land on when the app opens with no route in the hash. The
+   * hash wins while the app is open; this only decides where a fresh window
+   * starts.
+   */
+  dashboardView: DashboardView;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
   notifications: true,
   editor: DEFAULT_EDITOR,
   remoteRepos: [],
+  dashboardView: "overview",
 };
 
 /** `owner/repo`, the only shape `gh --repo` accepts. Anchored: this reaches a subprocess argument. */
@@ -375,6 +488,8 @@ export interface SettingsResponse {
   apiKey: ApiKeyStatus;
   ai: { model: string; dailyCap: number; callsRemaining: number };
   preferences: Preferences;
+  /** Phone push via ntfy. The URL is user-entered config, not a secret — it round-trips so the field can be edited. */
+  ntfy: { configured: boolean; url: string | null };
   github: GithubCliStatus;
 }
 

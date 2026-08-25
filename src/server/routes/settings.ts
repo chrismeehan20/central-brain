@@ -1,9 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { apiKeyStatus, clearApiKey, dismissSetup, saveApiKey } from "../ai/apiKey.js";
 import { AI_MODEL, callsRemaining, dailyCap } from "../ai/budget.js";
-import { getPreferences, updatePreferences } from "../store/db.js";
+import { getPreferences, settingsDb, updatePreferences, writeSettings } from "../store/db.js";
 import { getGhStatus, refreshGhStatus } from "../github/ghBinary.js";
-import { EDITORS, REPO_SLUG_RE } from "@shared/types.js";
+import { DASHBOARD_VIEWS, EDITORS, REPO_SLUG_RE } from "@shared/types.js";
+import type { DashboardView } from "@shared/types.js";
 
 interface ApiKeyBody {
   apiKey?: string;
@@ -13,6 +14,7 @@ interface PreferencesBody {
   notifications?: unknown;
   editor?: unknown;
   remoteRepos?: unknown;
+  dashboardView?: unknown;
 }
 
 /**
@@ -43,17 +45,51 @@ function parseRemoteRepos(value: unknown): { repos: string[] } | { error: string
  * `ApiKeyStatus` with a last-4 hint instead. Localhost-only binding is not a
  * reason to hand a live credential to a webview that also renders project text.
  */
+function ntfyStatus() {
+  const url = settingsDb.data.ntfyUrl ?? "";
+  return { configured: Boolean(url), url: url || null };
+}
+
 export async function settingsRoutes(app: FastifyInstance) {
   app.get("/api/settings", async () => ({
     apiKey: apiKeyStatus(),
     ai: { model: AI_MODEL, dailyCap: dailyCap(), callsRemaining: callsRemaining() },
     preferences: getPreferences(),
+    ntfy: ntfyStatus(),
     // Read from the boot-time cache rather than probed per request: this is
     // polled by the panel, and shelling out to `gh auth status` on every poll
     // would be a subprocess per second for an answer that changes when the
     // user installs something.
     github: getGhStatus(),
   }));
+
+  // Phone push. An empty string clears it. Only the URL's shape is validated —
+  // ntfy topics need no registration, so there is nothing to verify against.
+  app.put<{ Body: { url?: unknown } }>("/api/settings/ntfy", async (req, reply) => {
+    const url = req.body?.url;
+    if (typeof url !== "string") {
+      reply.code(400);
+      return { error: "url must be a string (empty to turn phone push off)" };
+    }
+    const trimmed = url.trim();
+    if (trimmed) {
+      let parsed: URL;
+      try {
+        parsed = new URL(trimmed);
+      } catch {
+        reply.code(400);
+        return { error: "That doesn't parse as a URL — expected e.g. https://ntfy.sh/your-topic" };
+      }
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        reply.code(400);
+        return { error: "The ntfy URL must be http(s)" };
+      }
+    }
+    if (trimmed) settingsDb.data.ntfyUrl = trimmed;
+    else delete settingsDb.data.ntfyUrl;
+    await writeSettings();
+    return { ntfy: ntfyStatus() };
+  });
 
   /**
    * Re-resolve `gh` and re-check its login.
@@ -65,7 +101,7 @@ export async function settingsRoutes(app: FastifyInstance) {
   app.post("/api/settings/github/recheck", async () => ({ github: await refreshGhStatus() }));
 
   app.put<{ Body: PreferencesBody }>("/api/settings/preferences", async (req, reply) => {
-    const { notifications, editor, remoteRepos } = req.body ?? {};
+    const { notifications, editor, remoteRepos, dashboardView } = req.body ?? {};
     if (notifications !== undefined && typeof notifications !== "boolean") {
       reply.code(400);
       return { error: "notifications must be a boolean" };
@@ -83,10 +119,18 @@ export async function settingsRoutes(app: FastifyInstance) {
       }
       parsedRepos = parsed.repos;
     }
+    if (
+      dashboardView !== undefined &&
+      !DASHBOARD_VIEWS.includes(dashboardView as DashboardView)
+    ) {
+      reply.code(400);
+      return { error: `dashboardView must be one of: ${DASHBOARD_VIEWS.join(", ")}` };
+    }
     const preferences = await updatePreferences({
       ...(notifications !== undefined ? { notifications } : {}),
       ...(editor !== undefined ? { editor: editor as keyof typeof EDITORS } : {}),
       ...(parsedRepos !== undefined ? { remoteRepos: parsedRepos } : {}),
+      ...(dashboardView !== undefined ? { dashboardView: dashboardView as DashboardView } : {}),
     });
     return { preferences };
   });

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ApiKeyStatus,
+  DashboardView,
   MissingProjectTriage,
   Preferences,
   Project,
@@ -11,10 +12,13 @@ import {
   fetchProjects,
   fetchRelocations,
   fetchSettings,
+  fetchUsage,
   relocateProject,
   triggerScan,
   updateOverride,
+  updatePreferences,
 } from "./api";
+import type { UsageWindow } from "@shared/types";
 import { PreferencesContext } from "./prefs";
 import {
   ACTIVE_WINDOW_DAYS,
@@ -24,19 +28,36 @@ import {
   matchesChips,
   partitionDashboard,
 } from "./sections";
+import { fleetCounts, fleetRows } from "./agents";
+import { flattenOpenPrs, prNeedsAttention } from "./views";
+import { useAttentionStream } from "./useAttentionStream";
+import Sidebar, { type OsView, VIEW_HASH } from "./Sidebar";
 import ProjectGrid from "./ProjectGrid";
 import ProjectDetailPage from "./ProjectDetailPage";
 import AttentionPanel from "./AttentionPanel";
 import ApiKeyPanel from "./ApiKeyPanel";
 import DigestPanel from "./DigestPanel";
 import HooksPanel from "./HooksPanel";
+import BoardPage from "./BoardPage";
+import AgentsPage from "./AgentsPage";
+import OpenPrsPage from "./OpenPrsPage";
+import ActivityPage from "./ActivityPage";
+import { GearIcon } from "./Icons";
 import { relativeTime } from "./format";
 
 const DETAIL_PREFIX = "#/project/";
 
-function parseRoute(): string | null {
+type Route = { kind: OsView } | { kind: "project"; path: string };
+
+function parseRoute(): Route {
   const hash = window.location.hash;
-  return hash.startsWith(DETAIL_PREFIX) ? decodeURIComponent(hash.slice(DETAIL_PREFIX.length)) : null;
+  if (hash.startsWith(DETAIL_PREFIX)) {
+    return { kind: "project", path: decodeURIComponent(hash.slice(DETAIL_PREFIX.length)) };
+  }
+  for (const view of ["board", "agents", "prs", "activity"] as const) {
+    if (hash === VIEW_HASH[view]) return { kind: view };
+  }
+  return { kind: "overview" };
 }
 
 export function goToProject(path: string): void {
@@ -48,7 +69,7 @@ export default function App() {
   const [lastScanAt, setLastScanAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [route, setRoute] = useState<string | null>(parseRoute());
+  const [route, setRoute] = useState<Route>(parseRoute());
   const [query, setQuery] = useState("");
   const [chips, setChips] = useState<Set<ChipId>>(new Set());
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
@@ -58,9 +79,41 @@ export default function App() {
   // Starts true so the key card never flashes above the hooks card before
   // the first hooks-status fetch lands (see HooksPanel's onOnboardingActionable).
   const [hooksOnboardingActive, setHooksOnboardingActive] = useState(true);
+  // The one SSE subscription to the attention list, shared by the panel, the
+  // sidebar badges, the board's live chips, and the agents roster.
+  const { attention, setAttention } = useAttentionStream();
+  const [usage, setUsage] = useState<UsageWindow | undefined>(undefined);
+
+  // The usage estimate only moves when activity is observed or a minute
+  // passes, so a quiet 60s poll matches its real resolution.
+  useEffect(() => {
+    const load = () =>
+      fetchUsage()
+        .then((res) => setUsage(res.claude))
+        .catch(() => {});
+    load();
+    const interval = setInterval(load, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // The stored landing view, kept in a ref so the hashchange handler (bound
+  // once) can compare without re-subscribing on every settings refresh.
+  const viewPrefRef = useRef<DashboardView | null>(null);
+  // Set once the landing decision has been made — writes before this are the
+  // app routing itself, not the user picking a view.
+  const landedRef = useRef(false);
 
   useEffect(() => {
-    const onHashChange = () => setRoute(parseRoute());
+    const onHashChange = () => {
+      const next = parseRoute();
+      setRoute(next);
+      // Picking a view persists it as the fresh-window landing. The project
+      // detail page is a drill-in, not a home view, so it never persists.
+      if (landedRef.current && next.kind !== "project" && viewPrefRef.current !== next.kind) {
+        viewPrefRef.current = next.kind;
+        updatePreferences({ dashboardView: next.kind }).then(handlePreferences).catch(() => {});
+      }
+    };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
@@ -74,6 +127,20 @@ export default function App() {
   }
 
   useEffect(loadSettings, []);
+
+  // Landing: a fresh window with an empty hash opens on the persisted view.
+  // The hash wins while the app is open — this runs once, on the first
+  // settings load, and never redirects an explicit hash (a bookmark or the
+  // tray popover landing on Overview stays where it aimed).
+  useEffect(() => {
+    if (!settings || landedRef.current) return;
+    const pref = settings.preferences.dashboardView;
+    viewPrefRef.current = pref;
+    if (!window.location.hash && pref !== "overview") {
+      window.location.hash = VIEW_HASH[pref];
+    }
+    landedRef.current = true;
+  }, [settings]);
 
   /** After a save/remove the daily-call counters are stale too, so refetch the lot. */
   function handleApiKeyStatus(apiKey: ApiKeyStatus) {
@@ -168,8 +235,38 @@ export default function App() {
     }
   }
 
-  if (error && !projects) {
+  // Sidebar badges: derived, not stored, so they can never disagree with the
+  // roster the Agents view renders from the same inputs.
+  const counts = useMemo(
+    () => fleetCounts(fleetRows(projects ?? [], attention, Date.now())),
+    [projects, attention],
+  );
+
+  // Open PRs that need you (attention row or red checks) — the same predicate
+  // the page sorts by, so the badge always matches the highlighted rows.
+  const prAttention = useMemo(
+    () => flattenOpenPrs(projects ?? [], attention, new Date()).filter(prNeedsAttention).length,
+    [projects, attention],
+  );
+
+  const preferences = settings?.preferences ?? DEFAULT_PREFERENCES;
+
+  // The sidebar stays up through loading and errors: a status surface that
+  // blanks its own chrome while unhappy was the original menubar complaint,
+  // and the same rule holds here.
+  function osShell(content: React.JSX.Element) {
     return (
+      <PreferencesContext.Provider value={preferences}>
+        <div className="os">
+          <Sidebar view={route.kind} counts={counts} prAttention={prAttention} usage={usage} />
+          <div className="os__main">{content}</div>
+        </div>
+      </PreferencesContext.Provider>
+    );
+  }
+
+  if (error && !projects) {
+    return osShell(
       <main className="shell">
         <h1>Central Brain</h1>
         <p className="error">Server not reachable: {error}</p>
@@ -178,7 +275,7 @@ export default function App() {
   }
 
   if (!projects) {
-    return (
+    return osShell(
       <main className="shell">
         <h1>Central Brain</h1>
         <p className="subtitle">Loading projects…</p>
@@ -186,19 +283,47 @@ export default function App() {
     );
   }
 
-  const preferences = settings?.preferences ?? DEFAULT_PREFERENCES;
+  if (route.kind === "project") {
+    return osShell(
+      <ProjectDetailPage
+        path={route.path}
+        project={projects.find((p) => p.path === route.path)}
+        onBack={() => {
+          window.location.hash = "";
+        }}
+      />
+    );
+  }
 
-  if (route) {
-    return (
-      <PreferencesContext.Provider value={preferences}>
-        <ProjectDetailPage
-          path={route}
-          project={projects.find((p) => p.path === route)}
-          onBack={() => {
-            window.location.hash = "";
-          }}
-        />
-      </PreferencesContext.Provider>
+  if (route.kind === "board") {
+    return osShell(
+      <main className="shell shell--wide">
+        <BoardPage projects={projects} attention={attention} />
+      </main>
+    );
+  }
+
+  if (route.kind === "agents") {
+    return osShell(
+      <main className="shell shell--wide">
+        <AgentsPage projects={projects} attention={attention} />
+      </main>
+    );
+  }
+
+  if (route.kind === "prs") {
+    return osShell(
+      <main className="shell">
+        <OpenPrsPage projects={projects} attention={attention} />
+      </main>
+    );
+  }
+
+  if (route.kind === "activity") {
+    return osShell(
+      <main className="shell">
+        <ActivityPage projects={projects} />
+      </main>
     );
   }
 
@@ -280,8 +405,7 @@ export default function App() {
     }
   }
 
-  return (
-    <PreferencesContext.Provider value={preferences}>
+  return osShell(
     <main className="shell">
       <header className="topbar">
         <div>
@@ -301,11 +425,12 @@ export default function App() {
             {scanning ? "Scanning…" : "Rescan"}
           </button>
           <button
+            className="topbar__gear"
             onClick={() => setSettingsOpen((open) => !open)}
             title="Settings"
             aria-label="Settings"
           >
-            ⚙
+            <GearIcon />
           </button>
         </div>
       </header>
@@ -371,7 +496,7 @@ export default function App() {
       {/* Every project, not just the shown sections: an attention row must
           resolve its project's display name even when that project is hidden,
           dormant, or filtered out by the search box and chips. */}
-      <AttentionPanel projects={projects} />
+      <AttentionPanel projects={projects} items={attention} onItemsChange={setAttention} />
       <DigestPanel />
 
       {filtering ? (
@@ -425,6 +550,5 @@ export default function App() {
       )}
       <ProjectGrid title="Hidden" projects={hidden} collapsible {...gridProps} />
     </main>
-    </PreferencesContext.Provider>
   );
 }

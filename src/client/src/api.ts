@@ -1,5 +1,8 @@
 import type {
+  ActivityEvent,
   AttentionItem,
+  BoardCard,
+  BoardColumnId,
   Project,
   Override,
   ProjectSummary,
@@ -12,6 +15,7 @@ import type {
   Preferences,
   SettingsResponse,
   MissingProjectTriage,
+  UsageWindow,
 } from "@shared/types";
 
 export async function fetchProjects(): Promise<{ projects: Project[]; lastScanAt: string | null }> {
@@ -125,6 +129,90 @@ export function snoozeAttention(id: string, minutes: number): Promise<{ items: A
 
 export function dismissAttention(id: string): Promise<{ items: AttentionItem[] }> {
   return attentionMutation("/api/attention/dismiss", { id });
+}
+
+/**
+ * Every board mutation returns the full card list, mirroring the attention
+ * mutations: the board re-renders from the server's answer, so two tabs (or an
+ * optimistic drag racing a slow save) converge on whatever the server holds.
+ */
+async function boardMutation(
+  url: string,
+  method: string,
+  body: Record<string, unknown>
+): Promise<{ cards: BoardCard[] }> {
+  const res = await fetch(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const parsed = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(parsed.error ?? `Request failed: ${res.status}`);
+  return parsed;
+}
+
+export async function fetchBoard(): Promise<{ cards: BoardCard[] }> {
+  const res = await fetch("/api/board");
+  if (!res.ok) throw new Error(`Failed to load the board: ${res.status}`);
+  return res.json();
+}
+
+export function createBoardCard(input: {
+  title: string;
+  note?: string;
+  projectPath?: string;
+  column?: BoardColumnId;
+}): Promise<{ cards: BoardCard[] }> {
+  return boardMutation("/api/board/card", "POST", input);
+}
+
+export function updateBoardCard(
+  id: string,
+  patch: { title?: string; note?: string; projectPath?: string | null }
+): Promise<{ cards: BoardCard[] }> {
+  return boardMutation("/api/board/card", "PATCH", { id, ...patch });
+}
+
+export function moveBoardCard(
+  id: string,
+  column: BoardColumnId,
+  index: number
+): Promise<{ cards: BoardCard[] }> {
+  return boardMutation("/api/board/move", "POST", { id, column, index });
+}
+
+export function deleteBoardCard(id: string): Promise<{ cards: BoardCard[] }> {
+  return boardMutation("/api/board/delete", "POST", { id });
+}
+
+/**
+ * "Start agent": opens a Terminal running Claude Code seeded with this card,
+ * optionally in a fresh git worktree. Returns where it started so the UI can
+ * say so.
+ */
+export function dispatchBoardCard(
+  id: string,
+  freshWorktree: boolean
+): Promise<{ cards: BoardCard[]; startedIn: string; branch?: string }> {
+  return boardMutation("/api/board/dispatch", "POST", { id, freshWorktree }) as Promise<{
+    cards: BoardCard[];
+    startedIn: string;
+    branch?: string;
+  }>;
+}
+
+/** The estimated Claude usage window; see UsageWindow for what "estimated" claims. */
+export async function fetchUsage(): Promise<{ claude: UsageWindow }> {
+  const res = await fetch("/api/usage");
+  if (!res.ok) throw new Error(`Failed to load usage: ${res.status}`);
+  return res.json();
+}
+
+/** The rolling hook-event window, oldest first; live appends arrive over SSE. */
+export async function fetchActivity(): Promise<{ events: ActivityEvent[] }> {
+  const res = await fetch("/api/activity");
+  if (!res.ok) throw new Error(`Failed to load activity: ${res.status}`);
+  return res.json();
 }
 
 /** `noActivity` = there is genuinely nothing to digest (not "AI is off"). */
@@ -266,6 +354,18 @@ export async function updatePreferences(patch: Partial<Preferences>): Promise<Pr
     throw new Error(err.error ?? `Failed to save preferences: ${res.status}`);
   }
   return (await res.json()).preferences;
+}
+
+/** Empty string turns phone push off. Returns the stored state for the settings field. */
+export async function saveNtfyUrl(url: string): Promise<{ configured: boolean; url: string | null }> {
+  const res = await fetch("/api/settings/ntfy", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Failed to save: ${res.status}`);
+  return body.ntfy;
 }
 
 export function saveApiKey(apiKey: string): Promise<ApiKeyStatus> {
