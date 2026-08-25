@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ApiKeyStatus,
+  DashboardView,
   MissingProjectTriage,
   Preferences,
   Project,
@@ -15,6 +16,7 @@ import {
   relocateProject,
   triggerScan,
   updateOverride,
+  updatePreferences,
 } from "./api";
 import type { UsageWindow } from "@shared/types";
 import { PreferencesContext } from "./prefs";
@@ -27,6 +29,7 @@ import {
   partitionDashboard,
 } from "./sections";
 import { fleetCounts, fleetRows } from "./agents";
+import { flattenOpenPrs, prNeedsAttention } from "./views";
 import { useAttentionStream } from "./useAttentionStream";
 import Sidebar, { type OsView, VIEW_HASH } from "./Sidebar";
 import ProjectGrid from "./ProjectGrid";
@@ -37,6 +40,7 @@ import DigestPanel from "./DigestPanel";
 import HooksPanel from "./HooksPanel";
 import BoardPage from "./BoardPage";
 import AgentsPage from "./AgentsPage";
+import OpenPrsPage from "./OpenPrsPage";
 import ActivityPage from "./ActivityPage";
 import { GearIcon } from "./Icons";
 import { relativeTime } from "./format";
@@ -50,7 +54,7 @@ function parseRoute(): Route {
   if (hash.startsWith(DETAIL_PREFIX)) {
     return { kind: "project", path: decodeURIComponent(hash.slice(DETAIL_PREFIX.length)) };
   }
-  for (const view of ["board", "agents", "activity"] as const) {
+  for (const view of ["board", "agents", "prs", "activity"] as const) {
     if (hash === VIEW_HASH[view]) return { kind: view };
   }
   return { kind: "overview" };
@@ -92,8 +96,24 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // The stored landing view, kept in a ref so the hashchange handler (bound
+  // once) can compare without re-subscribing on every settings refresh.
+  const viewPrefRef = useRef<DashboardView | null>(null);
+  // Set once the landing decision has been made — writes before this are the
+  // app routing itself, not the user picking a view.
+  const landedRef = useRef(false);
+
   useEffect(() => {
-    const onHashChange = () => setRoute(parseRoute());
+    const onHashChange = () => {
+      const next = parseRoute();
+      setRoute(next);
+      // Picking a view persists it as the fresh-window landing. The project
+      // detail page is a drill-in, not a home view, so it never persists.
+      if (landedRef.current && next.kind !== "project" && viewPrefRef.current !== next.kind) {
+        viewPrefRef.current = next.kind;
+        updatePreferences({ dashboardView: next.kind }).then(handlePreferences).catch(() => {});
+      }
+    };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
@@ -107,6 +127,20 @@ export default function App() {
   }
 
   useEffect(loadSettings, []);
+
+  // Landing: a fresh window with an empty hash opens on the persisted view.
+  // The hash wins while the app is open — this runs once, on the first
+  // settings load, and never redirects an explicit hash (a bookmark or the
+  // tray popover landing on Overview stays where it aimed).
+  useEffect(() => {
+    if (!settings || landedRef.current) return;
+    const pref = settings.preferences.dashboardView;
+    viewPrefRef.current = pref;
+    if (!window.location.hash && pref !== "overview") {
+      window.location.hash = VIEW_HASH[pref];
+    }
+    landedRef.current = true;
+  }, [settings]);
 
   /** After a save/remove the daily-call counters are stale too, so refetch the lot. */
   function handleApiKeyStatus(apiKey: ApiKeyStatus) {
@@ -208,6 +242,13 @@ export default function App() {
     [projects, attention],
   );
 
+  // Open PRs that need you (attention row or red checks) — the same predicate
+  // the page sorts by, so the badge always matches the highlighted rows.
+  const prAttention = useMemo(
+    () => flattenOpenPrs(projects ?? [], attention, new Date()).filter(prNeedsAttention).length,
+    [projects, attention],
+  );
+
   const preferences = settings?.preferences ?? DEFAULT_PREFERENCES;
 
   // The sidebar stays up through loading and errors: a status surface that
@@ -217,7 +258,7 @@ export default function App() {
     return (
       <PreferencesContext.Provider value={preferences}>
         <div className="os">
-          <Sidebar view={route.kind} counts={counts} usage={usage} />
+          <Sidebar view={route.kind} counts={counts} prAttention={prAttention} usage={usage} />
           <div className="os__main">{content}</div>
         </div>
       </PreferencesContext.Provider>
@@ -266,6 +307,14 @@ export default function App() {
     return osShell(
       <main className="shell shell--wide">
         <AgentsPage projects={projects} attention={attention} />
+      </main>
+    );
+  }
+
+  if (route.kind === "prs") {
+    return osShell(
+      <main className="shell">
+        <OpenPrsPage projects={projects} attention={attention} />
       </main>
     );
   }

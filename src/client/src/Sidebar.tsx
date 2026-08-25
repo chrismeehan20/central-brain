@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
-import type { UsageWindow } from "@shared/types";
+import type { DashboardView, UsageWindow } from "@shared/types";
 import type { FleetCounts } from "./agents";
 import { formatDuration } from "./format";
-import { BotIcon, BrandMark, GridIcon, KanbanIcon, PanelIcon, PulseIcon } from "./Icons";
+import { BotIcon, BrandMark, GridIcon, KanbanIcon, PanelIcon, PullRequestIcon, PulseIcon } from "./Icons";
 
-export type OsView = "overview" | "board" | "agents" | "activity";
+/** The sidebar routes to the shared view list, so the landing preference can name any of them. */
+export type OsView = DashboardView;
 
 /** Hash for each view. Overview keeps the bare hash so existing bookmarks and the tray popover land unchanged. */
 export const VIEW_HASH: Record<OsView, string> = {
   overview: "",
   board: "#/board",
   agents: "#/agents",
+  prs: "#/prs",
   activity: "#/activity",
 };
 
@@ -20,6 +22,8 @@ interface Props {
   /** The active view; "project" (the detail page) highlights Overview, which is where its back button lands. */
   view: OsView | "project";
   counts: FleetCounts;
+  /** Open PRs with an attention row or red checks — the Open PRs badge. */
+  prAttention?: number;
   /** The estimated Claude usage window; absent until the first fetch lands. */
   usage?: UsageWindow;
 }
@@ -34,10 +38,11 @@ const NAV: NavItem[] = [
   { view: "overview", label: "Overview", icon: GridIcon },
   { view: "board", label: "Mission Control", icon: KanbanIcon },
   { view: "agents", label: "Agents", icon: BotIcon },
+  { view: "prs", label: "Open PRs", icon: PullRequestIcon },
   { view: "activity", label: "Activity", icon: PulseIcon },
 ];
 
-export default function Sidebar({ view, counts, usage }: Props) {
+export default function Sidebar({ view, counts, prAttention = 0, usage }: Props) {
   // Collapse survives reloads but is per-browser, not a server preference:
   // it's about this window's width, not about how you use the product.
   const [collapsed, setCollapsed] = useState(() => {
@@ -75,21 +80,33 @@ export default function Sidebar({ view, counts, usage }: Props) {
       <div className="sidebar__nav">
         {NAV.map((item) => {
           const Icon = item.icon;
-          // The fleet badges live on Agents: that's the view that answers them.
-          const badges = item.view === "agents" && (
-            <>
-              {counts.waiting > 0 && (
-                <span className="sidebar__badge sidebar__badge--waiting" title={`${counts.waiting} waiting on you`}>
-                  {counts.waiting}
+          // Badges live on the view that answers them: fleet counts on
+          // Agents, needs-you PRs on Open PRs.
+          const badges =
+            item.view === "agents" ? (
+              <>
+                {counts.waiting > 0 && (
+                  <span className="sidebar__badge sidebar__badge--waiting" title={`${counts.waiting} waiting on you`}>
+                    {counts.waiting}
+                  </span>
+                )}
+                {counts.active > 0 && (
+                  <span className="sidebar__badge sidebar__badge--active" title={`${counts.active} active in the last 10 minutes`}>
+                    {counts.active}
+                  </span>
+                )}
+              </>
+            ) : (
+              item.view === "prs" &&
+              prAttention > 0 && (
+                <span
+                  className="sidebar__badge sidebar__badge--waiting"
+                  title={`${prAttention} PR${prAttention === 1 ? "" : "s"} need${prAttention === 1 ? "s" : ""} you`}
+                >
+                  {prAttention}
                 </span>
-              )}
-              {counts.active > 0 && (
-                <span className="sidebar__badge sidebar__badge--active" title={`${counts.active} active in the last 10 minutes`}>
-                  {counts.active}
-                </span>
-              )}
-            </>
-          );
+              )
+            );
           return (
             <a
               key={item.view}
