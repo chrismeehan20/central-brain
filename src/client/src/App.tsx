@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   ApiKeyStatus,
+  AttentionItem,
+  DashboardView,
   MissingProjectTriage,
   Preferences,
   Project,
   SettingsResponse,
 } from "@shared/types";
-import { DEFAULT_PREFERENCES } from "@shared/types";
+import { DASHBOARD_VIEWS, DEFAULT_PREFERENCES } from "@shared/types";
 import {
   fetchProjects,
   fetchRelocations,
@@ -14,6 +16,7 @@ import {
   relocateProject,
   triggerScan,
   updateOverride,
+  updatePreferences,
 } from "./api";
 import { PreferencesContext } from "./prefs";
 import {
@@ -26,6 +29,9 @@ import {
 } from "./sections";
 import ProjectGrid from "./ProjectGrid";
 import ProjectDetailPage from "./ProjectDetailPage";
+import OpenPrsView from "./OpenPrsView";
+import ActivityView from "./ActivityView";
+import SessionsView from "./SessionsView";
 import AttentionPanel from "./AttentionPanel";
 import ApiKeyPanel from "./ApiKeyPanel";
 import DigestPanel from "./DigestPanel";
@@ -33,22 +39,51 @@ import HooksPanel from "./HooksPanel";
 import { relativeTime } from "./format";
 
 const DETAIL_PREFIX = "#/project/";
+const VIEW_PREFIX = "#/view/";
 
-function parseRoute(): string | null {
+type Route =
+  | { kind: "home" }
+  | { kind: "project"; path: string }
+  | { kind: "view"; view: DashboardView };
+
+function parseRoute(): Route {
   const hash = window.location.hash;
-  return hash.startsWith(DETAIL_PREFIX) ? decodeURIComponent(hash.slice(DETAIL_PREFIX.length)) : null;
+  if (hash.startsWith(DETAIL_PREFIX)) {
+    return { kind: "project", path: decodeURIComponent(hash.slice(DETAIL_PREFIX.length)) };
+  }
+  if (hash.startsWith(VIEW_PREFIX)) {
+    const view = hash.slice(VIEW_PREFIX.length);
+    if ((DASHBOARD_VIEWS as readonly string[]).includes(view)) {
+      return { kind: "view", view: view as DashboardView };
+    }
+  }
+  return { kind: "home" };
 }
 
 export function goToProject(path: string): void {
   window.location.hash = DETAIL_PREFIX + encodeURIComponent(path);
 }
 
+export function goToView(view: DashboardView): void {
+  // The project grid is the app's home, so it keeps the bare hash rather than
+  // getting a redundant #/view/projects.
+  window.location.hash = view === "projects" ? "" : VIEW_PREFIX + view;
+}
+
+const VIEW_TABS: Array<{ id: DashboardView; label: string; title: string }> = [
+  { id: "projects", label: "Projects", title: "The project grid" },
+  { id: "prs", label: "Open PRs", title: "Every open pull request across your projects" },
+  { id: "activity", label: "Activity", title: "Recent sessions and commits across your projects" },
+  { id: "sessions", label: "Sessions", title: "Agent sessions that look live right now" },
+];
+
 export default function App() {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [lastScanAt, setLastScanAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [route, setRoute] = useState<string | null>(parseRoute());
+  const [route, setRoute] = useState<Route>(parseRoute());
+  const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([]);
   const [query, setQuery] = useState("");
   const [chips, setChips] = useState<Set<ChipId>>(new Set());
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
@@ -65,6 +100,24 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  // The attention stream lives here rather than in AttentionPanel: the
+  // consolidated PR and session views need the same rows for their badges and
+  // "waiting on you" tier, and one EventSource beats three.
+  useEffect(() => {
+    const source = new EventSource("/api/stream");
+    source.addEventListener("attention", (e) => {
+      try {
+        setAttentionItems(JSON.parse((e as MessageEvent).data));
+      } catch {
+        // ignore malformed frame
+      }
+    });
+    source.onerror = () => {
+      // EventSource auto-reconnects; nothing to do here.
+    };
+    return () => source.close();
+  }, []);
+
   function loadSettings() {
     // Quiet on failure: a settings fetch that fails must not replace the whole
     // dashboard with an error, since nothing else depends on it.
@@ -75,6 +128,17 @@ export default function App() {
 
   useEffect(loadSettings, []);
 
+  // A fresh window with nothing in the hash lands on the preferred view, once
+  // settings arrive. Only once: after that the hash is the source of truth.
+  const appliedInitialView = useRef(false);
+  useEffect(() => {
+    if (appliedInitialView.current || !settings) return;
+    appliedInitialView.current = true;
+    if (!window.location.hash || window.location.hash === "#") {
+      goToView(settings.preferences.dashboardView);
+    }
+  }, [settings]);
+
   /** After a save/remove the daily-call counters are stale too, so refetch the lot. */
   function handleApiKeyStatus(apiKey: ApiKeyStatus) {
     setSettings((prev) => (prev ? { ...prev, apiKey } : prev));
@@ -83,6 +147,16 @@ export default function App() {
 
   function handlePreferences(preferences: Preferences) {
     setSettings((prev) => (prev ? { ...prev, preferences } : prev));
+  }
+
+  function switchView(view: DashboardView) {
+    goToView(view);
+    // Remember where the next fresh window starts. Fire-and-forget: a failed
+    // save must not interrupt navigation, and nothing else depends on it.
+    if (settings && settings.preferences.dashboardView !== view) {
+      handlePreferences({ ...settings.preferences, dashboardView: view });
+      updatePreferences({ dashboardView: view }).catch(() => {});
+    }
   }
 
   function load() {
@@ -188,12 +262,13 @@ export default function App() {
 
   const preferences = settings?.preferences ?? DEFAULT_PREFERENCES;
 
-  if (route) {
+  if (route.kind === "project") {
+    const detailPath = route.path;
     return (
       <PreferencesContext.Provider value={preferences}>
         <ProjectDetailPage
-          path={route}
-          project={projects.find((p) => p.path === route)}
+          path={detailPath}
+          project={projects.find((p) => p.path === detailPath)}
           onBack={() => {
             window.location.hash = "";
           }}
@@ -201,6 +276,8 @@ export default function App() {
       </PreferencesContext.Provider>
     );
   }
+
+  const view: DashboardView = route.kind === "view" ? route.view : "projects";
 
   const q = query.trim().toLowerCase();
   const matches = (p: Project) =>
@@ -310,22 +387,42 @@ export default function App() {
         </div>
       </header>
 
-      {/* Sits under the search box because it is the same gesture: narrow the
-          board down to the projects you mean. AND semantics, so stacking two
-          chips gets more specific, not noisier. */}
-      <div className="chips">
-        {CHIPS.map((chip) => (
+      {/* The board's top-level lens: the project grid, or one of the
+          consolidated cross-project lists. Hidden projects stay out of all of
+          them (see views.ts). */}
+      <div className="viewswitch" role="tablist">
+        {VIEW_TABS.map((tab) => (
           <button
-            key={chip.id}
-            className={`chip${chips.has(chip.id) ? " chip--on" : ""}`}
-            title={chip.title}
-            aria-pressed={chips.has(chip.id)}
-            onClick={() => toggleChip(chip.id)}
+            key={tab.id}
+            className={`viewswitch__tab${view === tab.id ? " viewswitch__tab--on" : ""}`}
+            title={tab.title}
+            aria-pressed={view === tab.id}
+            onClick={() => switchView(tab.id)}
           >
-            {chip.label}
+            {tab.label}
           </button>
         ))}
       </div>
+
+      {/* Sits under the search box because it is the same gesture: narrow the
+          board down to the projects you mean. AND semantics, so stacking two
+          chips gets more specific, not noisier. Project-card predicates, so
+          only the Projects view shows them. */}
+      {view === "projects" && (
+        <div className="chips">
+          {CHIPS.map((chip) => (
+            <button
+              key={chip.id}
+              className={`chip${chips.has(chip.id) ? " chip--on" : ""}`}
+              title={chip.title}
+              aria-pressed={chips.has(chip.id)}
+              onClick={() => toggleChip(chip.id)}
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* A transient poll/save failure while good data is already on screen —
           degrade to a strip, not a full wipe. The 30s poll clears `error` on
@@ -371,10 +468,16 @@ export default function App() {
       {/* Every project, not just the shown sections: an attention row must
           resolve its project's display name even when that project is hidden,
           dormant, or filtered out by the search box and chips. */}
-      <AttentionPanel projects={projects} />
+      <AttentionPanel projects={projects} items={attentionItems} onItemsChange={setAttentionItems} />
       <DigestPanel />
 
-      {filtering ? (
+      {view === "prs" ? (
+        <OpenPrsView projects={projects} attentionItems={attentionItems} query={query} />
+      ) : view === "activity" ? (
+        <ActivityView projects={projects} query={query} />
+      ) : view === "sessions" ? (
+        <SessionsView projects={projects} attentionItems={attentionItems} query={query} />
+      ) : filtering ? (
         <ProjectGrid
           title="Matching projects"
           projects={matching}
@@ -402,7 +505,7 @@ export default function App() {
           <ProjectGrid title="All projects" projects={dormant} collapsible {...gridProps} />
         </>
       )}
-      {missing.length > 0 && (
+      {view === "projects" && missing.length > 0 && (
         <ProjectGrid
           title="Missing from disk"
           projects={missing}
@@ -423,7 +526,9 @@ export default function App() {
           {...gridProps}
         />
       )}
-      <ProjectGrid title="Hidden" projects={hidden} collapsible {...gridProps} />
+      {view === "projects" && (
+        <ProjectGrid title="Hidden" projects={hidden} collapsible {...gridProps} />
+      )}
     </main>
     </PreferencesContext.Provider>
   );

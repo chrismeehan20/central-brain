@@ -3,7 +3,7 @@ import path from "node:path";
 import { JSONFilePreset } from "lowdb/node";
 import { resolveDataDir } from "../appPaths.js";
 import type { Override, AttentionItem, GithubStatus, ProjectSummary, ProjectDetail, DailyDigest, HookReceipt, SourceTool, Preferences } from "@shared/types.js";
-import { DEFAULT_PREFERENCES, EDITORS } from "@shared/types.js";
+import { DASHBOARD_VIEWS, DEFAULT_PREFERENCES, EDITORS } from "@shared/types.js";
 
 /** Exported so startup can log it — inside an app bundle this is the only clue to where the data went. */
 export const dataDir = resolveDataDir();
@@ -95,10 +95,15 @@ export const settingsDb = await JSONFilePreset<SettingsData>(settingsPath, {
 export function getPreferences(): Preferences {
   const stored = settingsDb.data.preferences ?? {};
   const editor = stored.editor && stored.editor in EDITORS ? stored.editor : DEFAULT_PREFERENCES.editor;
+  const dashboardView =
+    stored.dashboardView && DASHBOARD_VIEWS.includes(stored.dashboardView)
+      ? stored.dashboardView
+      : DEFAULT_PREFERENCES.dashboardView;
   return {
     notifications: stored.notifications ?? DEFAULT_PREFERENCES.notifications,
     editor,
     remoteRepos: Array.isArray(stored.remoteRepos) ? stored.remoteRepos : DEFAULT_PREFERENCES.remoteRepos,
+    dashboardView,
   };
 }
 

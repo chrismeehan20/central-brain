@@ -52,6 +52,13 @@ export interface GithubStatus {
      * Undefined when the PR has no checks at all.
      */
     ciStatus?: string;
+    // The fields below are optional at the type level even though gh always
+    // returns them: a `github.json` cached by an older build lacks them until
+    // the next poll pass, so every consumer must tolerate their absence.
+    url?: string;
+    updatedAt?: string;
+    headRefName?: string;
+    author?: string; // GitHub login
   }>;
   /**
    * CI state of the checkout's CURRENT BRANCH — the newest workflow run on
@@ -325,6 +332,14 @@ export const EDITORS: Record<
 
 export const DEFAULT_EDITOR: EditorId = "vscode";
 
+/**
+ * The dashboard's top-level views: the project grid, plus the consolidated
+ * cross-project lists. Hidden and missing projects stay out of the
+ * consolidated views — see client/src/views.ts.
+ */
+export const DASHBOARD_VIEWS = ["projects", "prs", "activity", "sessions"] as const;
+export type DashboardView = (typeof DASHBOARD_VIEWS)[number];
+
 /** User preferences editable from the settings panel. */
 export interface Preferences {
   /** Fire desktop notifications for attention events. Off = the panel still updates, silently. */
@@ -339,12 +354,19 @@ export interface Preferences {
    * claude.ai/code never becomes a card on its own.
    */
   remoteRepos: string[];
+  /**
+   * The dashboard view to land on when the app opens with no route in the
+   * hash. The hash wins while the app is open; this only decides where a
+   * fresh window starts.
+   */
+  dashboardView: DashboardView;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
   notifications: true,
   editor: DEFAULT_EDITOR,
   remoteRepos: [],
+  dashboardView: "projects",
 };
 
 /** `owner/repo`, the only shape `gh --repo` accepts. Anchored: this reaches a subprocess argument. */
